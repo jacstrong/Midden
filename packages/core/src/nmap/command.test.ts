@@ -110,6 +110,7 @@ describe('option rendering', () => {
         minRate: 500,
         maxRetries: 2,
         hostTimeout: '5m',
+        // Both set on purpose: the file wins and --exclude is dropped, see "exclusions" below.
         excludes: ['10.0.0.9'],
         excludeFile: 'ex.txt',
         extra: ['--defeat-rst-ratelimit'],
@@ -127,8 +128,6 @@ describe('option rendering', () => {
       '2',
       '--host-timeout',
       '5m',
-      '--exclude',
-      '10.0.0.9',
       '--excludefile',
       'ex.txt',
       '-oA',
@@ -197,5 +196,32 @@ describe('helpers', () => {
   });
   it('writes a de-duplicated targets file', () => {
     expect(targetsFile(['10.0.0.1', '10.0.0.2', '10.0.0.1'])).toBe('10.0.0.1\n10.0.0.2\n');
+  });
+});
+
+describe('exclusions', () => {
+  // nmap 7.94, the build in Ubuntu 24.04, allocates until the OOM killer stops it when it is
+  // handed --exclude and --excludefile together. Nothing Midden generates may contain both.
+  const both = {
+    ...defaultPlan(),
+    targets: ['10.0.0.0/24'],
+    excludes: ['10.0.0.9'],
+    excludeFile: '/tmp/exclude.txt',
+  };
+
+  it('never emits both exclude flags', () => {
+    const argv = renderArgv(both);
+    expect(argv).toContain('--excludefile');
+    expect(argv).not.toContain('--exclude');
+  });
+
+  it('reports the combination as an error', () => {
+    const errors = validatePlan(both).filter((i) => i.level === 'error');
+    expect(errors.map((i) => i.message).join(' ')).toMatch(/exclude file/i);
+  });
+
+  it('still emits each one on its own', () => {
+    expect(renderArgv({ ...both, excludeFile: undefined })).toContain('--exclude');
+    expect(renderArgv({ ...both, excludes: undefined })).toContain('--excludefile');
   });
 });

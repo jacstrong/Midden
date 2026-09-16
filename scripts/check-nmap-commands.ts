@@ -48,7 +48,6 @@ const plans: Array<[string, NmapPlan]> = [
       ...defaultPlan(),
       targets: TARGETS,
       excludes: ['10.0.0.9'],
-      excludeFile,
       discovery: 'tcp-syn',
       discoveryPorts: '22,443',
       scan: 'syn',
@@ -66,6 +65,19 @@ const plans: Array<[string, NmapPlan]> = [
       hostTimeout: '5m',
       outputBase: out('custom'),
       outputFormats: ['all'],
+    },
+  ],
+  // Exclusion by file is a separate plan on purpose: nmap 7.94 exhausts memory when handed
+  // --exclude and --excludefile together, so the builder emits only one and this proves both.
+  [
+    'exclude-file',
+    {
+      ...defaultPlan(),
+      targets: TARGETS,
+      excludeFile,
+      scan: 'connect',
+      privileged: false,
+      outputBase: out('excl'),
     },
   ],
   [
@@ -112,6 +124,9 @@ async function main(): Promise<void> {
   for (const [name, plan] of plans) {
     const argv = renderArgv(plan);
     const check = toListScan(argv);
+    // Name the command before running it: when one of these wedged the CI runner, the log gave
+    // no clue which it was.
+    console.log(`run   ${name}`);
     try {
       await run('nmap', check, { timeout: 30_000 });
       console.log(`ok    ${name}: ${argv.join(' ')}`);

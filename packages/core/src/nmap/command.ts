@@ -152,6 +152,12 @@ export function validatePlan(p: NmapPlan): PlanIssue[] {
       level: 'error',
       message: 'Output file basename is required so results can be uploaded.',
     });
+  if (p.excludes?.length && p.excludeFile)
+    issues.push({
+      level: 'error',
+      message:
+        'Use either an exclude list or an exclude file, not both. Older nmap builds exhaust memory when given both, and only the file will be used.',
+    });
   if (!p.outputFormats.length)
     issues.push({
       level: 'error',
@@ -252,8 +258,11 @@ export function renderArgv(p: NmapPlan): string[] {
   if (p.minRate) a.push('--min-rate', String(p.minRate));
   if (p.maxRetries !== undefined) a.push('--max-retries', String(p.maxRetries));
   if (p.hostTimeout) a.push('--host-timeout', p.hostTimeout);
-  if (p.excludes?.length) a.push('--exclude', p.excludes.join(','));
+  // Never emit both exclude flags: nmap 7.94 (the version in Ubuntu 24.04) allocates without
+  // bound when it is given --exclude and --excludefile together, until the OOM killer stops it.
+  // validatePlan reports the combination; the file wins here so nothing generated can hang a box.
   if (p.excludeFile) a.push('--excludefile', p.excludeFile);
+  else if (p.excludes?.length) a.push('--exclude', p.excludes.join(','));
   const base = p.outputBase.trim() || 'scan';
   if (p.outputFormats.includes('all')) a.push('-oA', base);
   else {
