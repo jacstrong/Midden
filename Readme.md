@@ -122,5 +122,6 @@ A load check for the sync path, twenty clients at five operations a second each:
 
 The core package, the standalone build, the hosted server with live collaboration, terrain
 ingestion and the network map, the scan builder, evidence attachments, and optional OpenID
-Connect are all built and tested. Multi-arch image publishing and the release pipelines are
-written but have not yet been run on a real Docker daemon or a physical Pi.
+Connect are all built and tested. CI builds the image for `linux/amd64` and `linux/arm64` on
+every push. What has not been exercised yet is the tagged release path that pushes to the two
+registries, and acceptance on a physical Raspberry Pi.
