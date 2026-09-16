@@ -16,7 +16,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @midden/core build && pnpm -r typecheck",
     "test": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest run",
     "test:watch": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest",
     "e2e": "pnpm --filter @midden/e2e test",
