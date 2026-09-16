@@ -1,0 +1,359 @@
+[
+  {
+    "ip": "10.20.1.5",
+    "ipv6": "",
+    "mac": "00:50:56:A1:B2:C3",
+    "vendor": "VMware",
+    "hostnames": ["dc-corp-01.corp.example"],
+    "state": "up",
+    "reason": "",
+    "latency": "1.2 ms",
+    "distance": 2,
+    "ports": [
+      {
+        "port": 53,
+        "proto": "tcp",
+        "state": "open",
+        "name": "domain",
+        "product": "Simple DNS Plus",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 88,
+        "proto": "tcp",
+        "state": "open",
+        "name": "kerberos-sec",
+        "product": "Microsoft Windows Kerberos (server time: 2026-07-14 13:03:01Z)",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 135,
+        "proto": "tcp",
+        "state": "open",
+        "name": "msrpc",
+        "product": "Microsoft Windows RPC",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 139,
+        "proto": "tcp",
+        "state": "open",
+        "name": "netbios-ssn",
+        "product": "Microsoft Windows netbios-ssn",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 389,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ldap",
+        "product": "Microsoft Windows Active Directory LDAP (Domain: corp.example, Site: Default-First-Site-Name)",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 445,
+        "proto": "tcp",
+        "state": "open",
+        "name": "microsoft-ds",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 464,
+        "proto": "tcp",
+        "state": "open",
+        "name": "kpasswd5",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 636,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ssl/ldap",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 3389,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ms-wbt-server",
+        "product": "Microsoft Terminal Services",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      }
+    ],
+    "os_name": "Microsoft Windows 2022",
+    "os_accuracy": "",
+    "os_family": "",
+    "os_vendor": "",
+    "os_type": "",
+    "trace": [
+      {
+        "ttl": 1,
+        "ip": "10.20.0.1",
+        "host": "gw.corp.example",
+        "rtt": "0.83 ms"
+      },
+      {
+        "ttl": 2,
+        "ip": "10.20.1.5",
+        "host": "dc-corp-01.corp.example",
+        "rtt": "1.21 ms"
+      }
+    ],
+    "scripts": [],
+    "uptime": "",
+    "bucket": "Windows",
+    "role": "Domain controller",
+    "flags": [
+      "135/tcp - MSRPC exposed",
+      "139/tcp - NetBIOS / SMBv1 era",
+      "389/tcp - LDAP (cleartext)",
+      "445/tcp - SMB exposed",
+      "3389/tcp - RDP exposed"
+    ],
+    "open_count": 9
+  },
+  {
+    "ip": "10.20.4.31",
+    "ipv6": "",
+    "mac": "B8:27:EB:11:22:33",
+    "vendor": "Raspberry Pi Foundation",
+    "hostnames": ["web-01.corp.example"],
+    "state": "up",
+    "reason": "",
+    "latency": "1.9 ms",
+    "distance": 3,
+    "ports": [
+      {
+        "port": 22,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ssh",
+        "product": "OpenSSH 9.2p1 Debian 2 (protocol 2.0)",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 80,
+        "proto": "tcp",
+        "state": "open",
+        "name": "http",
+        "product": "nginx 1.22.1",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 443,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ssl/http",
+        "product": "nginx 1.22.1",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      }
+    ],
+    "os_name": "Linux 5.4 - 5.15 (95%)",
+    "os_accuracy": "",
+    "os_family": "",
+    "os_vendor": "",
+    "os_type": "",
+    "trace": [
+      {
+        "ttl": 1,
+        "ip": "10.20.0.1",
+        "host": "gw.corp.example",
+        "rtt": "0.71 ms"
+      },
+      {
+        "ttl": 2,
+        "ip": "10.20.4.254",
+        "host": "",
+        "rtt": "1.05 ms"
+      },
+      {
+        "ttl": 3,
+        "ip": "10.20.4.31",
+        "host": "web-01.corp.example",
+        "rtt": "1.44 ms"
+      }
+    ],
+    "scripts": [],
+    "uptime": "",
+    "bucket": "Linux / Unix",
+    "role": "Web server",
+    "flags": [],
+    "open_count": 3
+  },
+  {
+    "ip": "10.20.4.77",
+    "ipv6": "",
+    "mac": "",
+    "vendor": "",
+    "hostnames": ["wks-fin-077.corp.example"],
+    "state": "up",
+    "reason": "",
+    "latency": "2.2 ms",
+    "distance": 2,
+    "ports": [
+      {
+        "port": 135,
+        "proto": "tcp",
+        "state": "open",
+        "name": "msrpc",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 139,
+        "proto": "tcp",
+        "state": "open",
+        "name": "netbios-ssn",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 445,
+        "proto": "tcp",
+        "state": "open",
+        "name": "microsoft-ds",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 3389,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ms-wbt-server",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      }
+    ],
+    "os_name": "",
+    "os_accuracy": "",
+    "os_family": "",
+    "os_vendor": "",
+    "os_type": "",
+    "trace": [],
+    "scripts": [],
+    "uptime": "",
+    "bucket": "Windows",
+    "role": "File / SMB",
+    "flags": [
+      "135/tcp - MSRPC exposed",
+      "139/tcp - NetBIOS / SMBv1 era",
+      "445/tcp - SMB exposed",
+      "3389/tcp - RDP exposed"
+    ],
+    "open_count": 4
+  },
+  {
+    "ip": "10.20.4.99",
+    "ipv6": "",
+    "mac": "",
+    "vendor": "",
+    "hostnames": [],
+    "state": "up",
+    "reason": "",
+    "latency": "",
+    "distance": null,
+    "ports": [],
+    "os_name": "",
+    "os_accuracy": "",
+    "os_family": "",
+    "os_vendor": "",
+    "os_type": "",
+    "trace": [],
+    "scripts": [],
+    "uptime": "",
+    "bucket": "Unknown",
+    "role": "",
+    "flags": [],
+    "open_count": 0
+  },
+  {
+    "ip": "10.20.9.100",
+    "ipv6": "",
+    "mac": "3C:2A:F4:00:11:22",
+    "vendor": "Brother Industries",
+    "hostnames": [],
+    "state": "up",
+    "reason": "",
+    "latency": "0.4 ms",
+    "distance": 1,
+    "ports": [
+      {
+        "port": 515,
+        "proto": "tcp",
+        "state": "open",
+        "name": "printer",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 631,
+        "proto": "tcp",
+        "state": "open",
+        "name": "ipp",
+        "product": "CUPS 2.3",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      },
+      {
+        "port": 9100,
+        "proto": "tcp",
+        "state": "open",
+        "name": "jetdirect",
+        "product": "",
+        "version": "",
+        "extra": "",
+        "tunnel": ""
+      }
+    ],
+    "os_name": "",
+    "os_accuracy": "",
+    "os_family": "",
+    "os_vendor": "",
+    "os_type": "",
+    "trace": [],
+    "scripts": [],
+    "uptime": "",
+    "bucket": "Printer",
+    "role": "Printer",
+    "flags": [],
+    "open_count": 3
+  }
+]
