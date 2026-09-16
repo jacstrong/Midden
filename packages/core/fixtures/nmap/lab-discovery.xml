@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sn -T4 -n -oX discovery.xml -oN discovery.nmap 10.20.0.0/16" start="1752497000" startstr="Mon Jul 14 12:43:20 2026" version="7.98" xmloutputversion="1.05">
+<verbose level="0"/>
+<debugging level="0"/>
+<host><status state="up" reason="echo-reply" reason_ttl="255"/><address addr="10.20.0.1" addrtype="ipv4"/><hostnames></hostnames></host>
+<host><status state="up" reason="echo-reply" reason_ttl="126"/><address addr="10.20.1.5" addrtype="ipv4"/><hostnames></hostnames></host>
+<host><status state="up" reason="syn-ack" reason_ttl="63"/><address addr="10.20.4.31" addrtype="ipv4"/><hostnames></hostnames></host>
+<host><status state="up" reason="echo-reply" reason_ttl="127"/><address addr="10.20.4.77" addrtype="ipv4"/><hostnames></hostnames></host>
+<host><status state="up" reason="arp-response" reason_ttl="0"/><address addr="10.20.9.100" addrtype="ipv4"/><address addr="3C:2A:F4:00:11:22" addrtype="mac" vendor="Brother Industries"/><hostnames></hostnames></host>
+<host><status state="down" reason="no-response" reason_ttl="0"/><address addr="10.20.4.99" addrtype="ipv4"/></host>
+<runstats><finished time="1752497120" timestr="Mon Jul 14 12:45:20 2026" summary="Nmap done" elapsed="120.04" exit="success"/><hosts up="5" down="65531" total="65536"/></runstats>
+</nmaprun>

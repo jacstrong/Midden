@@ -1,0 +1,14 @@
+services:
+  midden:
+    image: ghcr.io/jacstrong/midden:latest
+    build:
+      context: ..
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./data:/data
+    environment:
+      MIDDEN_SECRET: change-me-to-a-long-random-string
+      MIDDEN_ADMIN_USER: admin
+      MIDDEN_ADMIN_PASSWORD: change-me
+    restart: unless-stopped

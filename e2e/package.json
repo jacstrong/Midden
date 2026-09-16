@@ -1,0 +1,15 @@
+{
+  "name": "@midden/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:standalone": "playwright test --project=standalone-chromium --project=standalone-firefox --project=standalone-webkit",
+    "install-browsers": "playwright install --with-deps chromium firefox webkit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

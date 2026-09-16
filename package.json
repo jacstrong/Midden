@@ -1,0 +1,39 @@
+{
+  "name": "midden",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cyber hunt / DCO attack reconstruction and terrain mapping",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/**' build",
+    "build:standalone": "pnpm --filter @midden/web build:standalone",
+    "dev": "pnpm -r --parallel --filter './packages/**' dev",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest run",
+    "test:watch": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest",
+    "e2e": "pnpm --filter @midden/e2e test",
+    "check:native": "scripts/check-no-native.sh",
+    "check:nmap": "node --no-warnings=ExperimentalWarning scripts/check-nmap-commands.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@midden/core": "workspace:*",
+    "@types/node": "^24.13.5",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "fast-check": "^4.10.1",
+    "jsdom": "^27.4.0",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1"
+  }
+}

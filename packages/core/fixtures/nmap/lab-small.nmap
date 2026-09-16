@@ -1,0 +1,67 @@
+# Nmap 7.98 scan initiated Mon Jul 14 13:02:41 2026 as: nmap -sS -sV -O --traceroute -T4 -oN lab-small.nmap 10.20.0.0/16
+Nmap scan report for dc-corp-01.corp.example (10.20.1.5)
+Host is up (0.0012s latency).
+Not shown: 991 filtered tcp ports (no-response)
+PORT     STATE SERVICE       VERSION
+53/tcp   open  domain        Simple DNS Plus
+88/tcp   open  kerberos-sec  Microsoft Windows Kerberos (server time: 2026-07-14 13:03:01Z)
+135/tcp  open  msrpc         Microsoft Windows RPC
+139/tcp  open  netbios-ssn   Microsoft Windows netbios-ssn
+389/tcp  open  ldap          Microsoft Windows Active Directory LDAP (Domain: corp.example, Site: Default-First-Site-Name)
+445/tcp  open  microsoft-ds
+464/tcp  open  kpasswd5
+636/tcp  open  ssl/ldap
+3389/tcp open  ms-wbt-server Microsoft Terminal Services
+MAC Address: 00:50:56:A1:B2:C3 (VMware)
+Device type: general purpose
+Running: Microsoft Windows 2022
+OS details: Microsoft Windows Server 2022
+Network Distance: 2 hops
+Service Info: Host: DC-CORP-01; OS: Windows; CPE: cpe:/o:microsoft:windows
+
+TRACEROUTE (using port 53/tcp)
+HOP RTT     ADDRESS
+1   0.83 ms gw.corp.example (10.20.0.1)
+2   1.21 ms dc-corp-01.corp.example (10.20.1.5)
+
+Nmap scan report for web-01.corp.example (10.20.4.31)
+Host is up (0.0019s latency).
+Not shown: 996 closed tcp ports (reset)
+PORT     STATE  SERVICE    VERSION
+22/tcp   open   ssh        OpenSSH 9.2p1 Debian 2 (protocol 2.0)
+80/tcp   open   http       nginx 1.22.1
+443/tcp  open   ssl/http   nginx 1.22.1
+8080/tcp closed http-proxy
+MAC Address: B8:27:EB:11:22:33 (Raspberry Pi Foundation)
+Aggressive OS guesses: Linux 5.4 - 5.15 (95%), Linux 4.15 (90%)
+Network Distance: 3 hops
+
+TRACEROUTE (using port 443/tcp)
+HOP RTT     ADDRESS
+1   0.71 ms gw.corp.example (10.20.0.1)
+2   1.05 ms 10.20.4.254
+3   1.44 ms web-01.corp.example (10.20.4.31)
+
+Nmap scan report for wks-fin-077.corp.example (10.20.4.77)
+Host is up (0.0022s latency).
+PORT     STATE    SERVICE
+135/tcp  open     msrpc
+139/tcp  open     netbios-ssn
+445/tcp  open     microsoft-ds
+3389/tcp open     ms-wbt-server
+5357/tcp filtered wsdapi
+Network Distance: 2 hops
+
+Nmap scan report for 10.20.4.99
+Host is down.
+
+Nmap scan report for 10.20.9.100
+Host is up (0.00041s latency).
+PORT     STATE SERVICE   VERSION
+515/tcp  open  printer
+631/tcp  open  ipp       CUPS 2.3
+9100/tcp open  jetdirect
+MAC Address: 3C:2A:F4:00:11:22 (Brother Industries)
+Network Distance: 1 hop
+
+# Nmap done at Mon Jul 14 13:07:41 2026 -- 65536 IP addresses (5 hosts up) scanned in 300.12 seconds
