@@ -111,6 +111,11 @@ export interface AttachmentMeta {
   target: AttachmentTarget;
   uploadedBy: string;
   createdAt: string;
+  /**
+   * Malware, a weaponised document, or anything else an analyst must not open by accident. The
+   * stored bytes are untouched (the hash is the sample's hash); the download is wrapped instead.
+   */
+  dangerous?: boolean | undefined;
 }
 
 export interface CaseState {

@@ -1519,3 +1519,22 @@ kbd {
   color: var(--dim);
   font-size: 9.5px;
 }
+
+/* ---------- dangerous attachments ---------- */
+.attachbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.attach.dangerous {
+  border-color: rgba(255, 77, 94, 0.55);
+}
+.attach.dangerous .attachicon {
+  color: var(--rd);
+  border-color: rgba(255, 77, 94, 0.4);
+}
+.dangerbadge {
+  color: var(--rd);
+  align-self: flex-start;
+}

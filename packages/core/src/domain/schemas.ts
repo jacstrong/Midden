@@ -101,6 +101,7 @@ export const AttachmentMetaSchema = z.object({
   target: AttachmentTargetSchema,
   uploadedBy: str,
   createdAt: str,
+  dangerous: z.boolean().optional(),
 });
 
 export const CaseStateSchema = z.object({

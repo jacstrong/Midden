@@ -58,3 +58,70 @@ export function safeFilename(name: string, fallback = 'attachment'): string {
     .trim();
   return base.slice(0, 120) || fallback;
 }
+
+/**
+ * Why a file is considered dangerous to open, or null. Deliberately conservative: it catches the
+ * things an analyst will attach from a compromised host (executables, scripts, shortcuts, macro
+ * carriers, markup) and lets the uploader flag anything it misses. Never used to allow anything.
+ */
+export function dangerReason(head: Buffer, filename: string): string | null {
+  if (startsWith(head, [0x4d, 0x5a])) return 'Windows executable (PE)';
+  if (startsWith(head, [0x7f, 0x45, 0x4c, 0x46])) return 'Linux executable (ELF)';
+  if (
+    startsWith(head, [0xfe, 0xed, 0xfa, 0xce]) ||
+    startsWith(head, [0xfe, 0xed, 0xfa, 0xcf]) ||
+    startsWith(head, [0xce, 0xfa, 0xed, 0xfe]) ||
+    startsWith(head, [0xcf, 0xfa, 0xed, 0xfe])
+  )
+    return 'macOS executable (Mach-O)';
+  if (startsWith(head, [0xca, 0xfe, 0xba, 0xbe])) return 'Java class or universal binary';
+  if (startsWith(head, [0x4c, 0x00, 0x00, 0x00, 0x01, 0x14, 0x02, 0x00])) return 'Windows shortcut';
+  if (startsWith(head, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))
+    return 'OLE document (legacy Office, MSI)';
+  if (startsWith(head, [0x23, 0x21])) return 'script with a shebang';
+  const text = head.subarray(0, 512).toString('latin1').trimStart().toLowerCase();
+  if (/^<(!doctype html|html|script|\?xml[^>]*>\s*<(script|svg))/.test(text))
+    return 'HTML or scripted markup';
+
+  const ext = filename.toLowerCase().match(/\.([a-z0-9]{1,5})$/)?.[1] ?? '';
+  const byExt: Record<string, string> = {
+    exe: 'executable',
+    dll: 'executable',
+    sys: 'executable',
+    scr: 'executable',
+    com: 'executable',
+    pif: 'executable',
+    msi: 'installer',
+    msp: 'installer',
+    bat: 'script',
+    cmd: 'script',
+    ps1: 'script',
+    psm1: 'script',
+    vbs: 'script',
+    vbe: 'script',
+    js: 'script',
+    jse: 'script',
+    wsf: 'script',
+    wsh: 'script',
+    hta: 'script',
+    sh: 'script',
+    py: 'script',
+    jar: 'Java archive',
+    lnk: 'Windows shortcut',
+    url: 'internet shortcut',
+    docm: 'macro-enabled document',
+    xlsm: 'macro-enabled workbook',
+    pptm: 'macro-enabled presentation',
+    dotm: 'macro-enabled template',
+    xlam: 'macro-enabled add-in',
+    iso: 'disk image',
+    img: 'disk image',
+    vhd: 'disk image',
+    vhdx: 'disk image',
+    chm: 'compiled help file',
+    reg: 'registry script',
+    inf: 'setup information file',
+  };
+  const reason = byExt[ext];
+  return reason ? `${reason} (.${ext})` : null;
+}

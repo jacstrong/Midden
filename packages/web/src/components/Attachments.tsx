@@ -27,6 +27,8 @@ export function Attachments({
   const confirm = useUiStore((s) => s.confirm);
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // Set by the uploader for a sample the sniffer would not recognise; the server also flags on its own.
+  const [markDangerous, setMarkDangerous] = useState(false);
 
   if (!canAttach || !caseId) return null;
   const items = Object.values(all).filter(
@@ -39,9 +41,17 @@ export function Attachments({
     form.append('file', file, file.name);
     form.append('targetKind', targetKind);
     form.append('targetId', targetId);
+    if (markDangerous) form.append('dangerous', '1');
     try {
-      await apiUpload<{ attachment: AttachmentMeta }>(`/api/cases/${caseId}/attachments`, form);
-      toast(`Attached ${file.name}`);
+      const r = await apiUpload<{ attachment: AttachmentMeta; dangerReason: string | null }>(
+        `/api/cases/${caseId}/attachments`,
+        form,
+      );
+      if (r.dangerReason)
+        toast(`Attached ${file.name} — flagged as dangerous: ${r.dangerReason}`, 'warn');
+      else if (r.attachment.dangerous) toast(`Attached ${file.name} as dangerous`, 'warn');
+      else toast(`Attached ${file.name}`);
+      setMarkDangerous(false);
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'Upload failed', 'bad');
     } finally {
@@ -76,18 +86,33 @@ export function Attachments({
       <div className="attachgrid">
         {items.map((a) => {
           const href = `/api/cases/${caseId}/attachments/${a.id}`;
-          const isImage = a.mime.startsWith('image/');
+          const isImage = a.mime.startsWith('image/') && !a.dangerous;
+          const title = a.dangerous
+            ? `${a.name} · dangerous · downloads as ${a.name}.zip, password "infected"`
+            : `${a.name} · ${a.mime}`;
           return (
-            <div key={a.id} className="attach" data-testid="attachment">
-              <a href={href} target="_blank" rel="noopener" title={`${a.name} · ${a.mime}`}>
+            <div
+              key={a.id}
+              className={a.dangerous ? 'attach dangerous' : 'attach'}
+              data-testid="attachment"
+              data-dangerous={a.dangerous ? '1' : undefined}
+            >
+              <a href={href} target="_blank" rel="noopener" title={title}>
                 {isImage ? (
                   <img src={href} alt={a.name} />
                 ) : (
                   <span className="attachicon">
-                    {a.mime.includes('pdf') ? 'PDF' : a.mime.startsWith('text/') ? 'TXT' : 'FILE'}
+                    {a.dangerous
+                      ? 'ZIP'
+                      : a.mime.includes('pdf')
+                        ? 'PDF'
+                        : a.mime.startsWith('text/')
+                          ? 'TXT'
+                          : 'FILE'}
                   </span>
                 )}
                 <span className="attachname">{a.name}</span>
+                {a.dangerous && <span className="badge dangerbadge">dangerous</span>}
               </a>
               <span className="attachmeta">
                 {humanSize(a.size)}
@@ -107,15 +132,28 @@ export function Attachments({
       </div>
       {canEdit && (
         <>
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() => input.current?.click()}
-            style={{ marginTop: 8 }}
-            data-testid="attach-file"
-          >
-            {busy ? 'Uploading…' : '+ Attach a file'}
-          </button>
+          <div className="attachbar">
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => input.current?.click()}
+              data-testid="attach-file"
+            >
+              {busy ? 'Uploading…' : '+ Attach a file'}
+            </button>
+            <label
+              className="ck"
+              title="Malware, a weaponised document, a script pulled from a host. It is stored as-is and every download comes wrapped in a zip with the password “infected”."
+            >
+              <input
+                type="checkbox"
+                checked={markDangerous}
+                onChange={(e) => setMarkDangerous(e.target.checked)}
+                data-testid="attach-dangerous"
+              />{' '}
+              Dangerous file
+            </label>
+          </div>
           <input
             ref={input}
             type="file"

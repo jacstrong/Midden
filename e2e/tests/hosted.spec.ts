@@ -279,7 +279,7 @@ test.describe('hosted collaboration', () => {
     await ann.getByTestId('attach-input').setInputFiles({
       name: 'notes.png',
       mimeType: 'image/png',
-      buffer: Buffer.from('<html><script>alert(1)</script></html>'),
+      buffer: Buffer.from('2026-07-14 13:02:41 4624 CORP\\j.reyes logon type 10\n'),
     });
     await expect(ann.getByTestId('attachment')).toHaveCount(2);
     const href = await ann.getByTestId('attachment').nth(1).locator('a').getAttribute('href');
@@ -287,6 +287,27 @@ test.describe('hosted collaboration', () => {
     expect(served.headers()['content-type']).toContain('text/plain');
     expect(served.headers()['content-disposition']).toContain('attachment;');
     expect(served.headers()['x-content-type-options']).toBe('nosniff');
+
+    // an executable is flagged on sight, shown with a warning to both analysts, and every
+    // download of it is an encrypted zip rather than the sample itself
+    await ann.getByTestId('attach-input').setInputFiles({
+      name: 'dropper.exe',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.concat([Buffer.from('MZ\x90\x00', 'latin1'), Buffer.alloc(200, 0xcc)]),
+    });
+    await expect(ann.getByTestId('attachment')).toHaveCount(3);
+    const exe = ann.getByTestId('attachment').nth(2);
+    await expect(exe).toHaveAttribute('data-dangerous', '1');
+    await expect(exe).toContainText('dangerous');
+    await expect(bob.getByTestId('attachment').nth(2)).toHaveAttribute('data-dangerous', '1');
+    const exeHref = await exe.locator('a').getAttribute('href');
+    const wrapped = await bob.request.get(`${BASE}${exeHref}`);
+    expect(wrapped.headers()['content-type']).toContain('application/zip');
+    expect(wrapped.headers()['content-disposition']).toContain('dropper.exe.zip');
+    expect((await wrapped.body()).indexOf(Buffer.from('MZ\x90', 'latin1'))).toBe(-1);
+    await exe.getByTestId('attachment-remove').click();
+    await ann.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+    await expect(ann.getByTestId('attachment')).toHaveCount(2);
 
     // removing it takes the file with it
     await ann.getByTestId('attachment').nth(1).getByTestId('attachment-remove').click();
