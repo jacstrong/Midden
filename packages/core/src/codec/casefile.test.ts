@@ -113,7 +113,11 @@ describe('write / read v2 round trip', () => {
         name: 'note.txt',
         target: { kind: 'event', id: 'ev_demo_01' },
         uploadedBy: 'u1',
+        uploadedByName: 'Ann',
         createdAt: '2026-07-15T10:00:00.000Z',
+        md5: 'c'.repeat(32),
+        note: '',
+        dangerous: false,
       },
     });
     const host = {

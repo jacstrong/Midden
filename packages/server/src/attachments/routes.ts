@@ -27,6 +27,9 @@ interface AttachmentRow {
   created_at: string;
   deleted_at: string | null;
   dangerous: number;
+  md5: string;
+  uploaded_by_name: string;
+  note: string;
 }
 
 const rowToMeta = (r: AttachmentRow): AttachmentMeta => ({
@@ -37,8 +40,11 @@ const rowToMeta = (r: AttachmentRow): AttachmentMeta => ({
   name: r.name,
   target: { kind: r.target_kind, id: r.target_id },
   uploadedBy: r.uploaded_by,
+  uploadedByName: r.uploaded_by_name,
   createdAt: r.created_at,
-  ...(r.dangerous ? { dangerous: true } : {}),
+  md5: r.md5,
+  note: r.note,
+  dangerous: !!r.dangerous,
 });
 
 export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
@@ -55,11 +61,12 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
     const caseId = req.params.id;
     const maxBytes = app.cfg.maxUploadMb * 1_048_576;
-    let stored: { sha256: string; size: number; path: string } | null = null;
+    let stored: { sha256: string; md5: string; size: number; path: string } | null = null;
     let filename = 'evidence';
     let targetKind: string | undefined;
     let targetId: string | undefined;
     let flagged = false;
+    let note = '';
 
     for await (const part of req.parts({ limits: { fileSize: maxBytes, files: 1 } })) {
       if (part.type === 'file') {
@@ -82,6 +89,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       else if (part.fieldname === 'targetId') targetId = String(part.value);
       else if (part.fieldname === 'dangerous')
         flagged = /^(1|true|on|yes)$/i.test(String(part.value));
+      else if (part.fieldname === 'note') note = String(part.value).slice(0, 4000);
     }
 
     const fail = async (e: HttpError): Promise<never> => {
@@ -129,11 +137,14 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       name: safeFilename(filename),
       target: { kind: kind.data!, id: targetId! },
       uploadedBy: user.id,
+      uploadedByName: user.displayName,
       createdAt: nowIso(),
-      ...(dangerous ? { dangerous: true } : {}),
+      md5: stored.md5,
+      note,
+      dangerous,
     };
     app.db.run(
-      'INSERT INTO attachments (id, case_id, sha256, size, mime, name, target_kind, target_id, uploaded_by, created_at, dangerous) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO attachments (id, case_id, sha256, size, mime, name, target_kind, target_id, uploaded_by, created_at, dangerous, md5, uploaded_by_name, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       meta.id,
       caseId,
       meta.sha256,
@@ -145,6 +156,9 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       meta.uploadedBy,
       meta.createdAt,
       dangerous ? 1 : 0,
+      meta.md5,
+      meta.uploadedByName,
+      meta.note,
     );
     const r = rt.appendOp(
       { id: user.id, name: user.displayName },

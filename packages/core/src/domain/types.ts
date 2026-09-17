@@ -110,13 +110,20 @@ export interface AttachmentMeta {
   name: string;
   target: AttachmentTarget;
   uploadedBy: string;
+  /** Display name at the time of upload, kept on the record so custody reads without a user lookup. */
+  uploadedByName: string;
   createdAt: string;
+  /** Hex MD5 of the stored bytes, alongside sha256, because that is what most threat intel still keys on. */
+  md5: string;
+  /** Analyst's note about the file: where it came from, what it is. The one field editable after upload. */
+  note: string;
   /**
    * Malware, a weaponised document, or anything else an analyst must not open by accident. The
    * stored bytes are untouched (the hash is the sample's hash); the download is wrapped instead.
    */
-  dangerous?: boolean | undefined;
+  dangerous: boolean;
 }
+export type AttachmentFields = Omit<AttachmentMeta, 'id'>;
 
 export interface CaseState {
   case: CaseMeta;

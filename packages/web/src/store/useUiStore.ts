@@ -35,6 +35,14 @@ export type ModalState =
   | { kind: 'case' }
   | { kind: 'menu' }
   | {
+      kind: 'attach-upload';
+      targetKind: 'event' | 'host';
+      targetId: string;
+      /** The editor this was opened from, restored on close. */
+      returnTo?: ModalState | undefined;
+    }
+  | { kind: 'attachment'; id: string; returnTo?: ModalState | undefined }
+  | {
       kind: 'import';
       parsed: ParsedCaseFile;
       fileName: string;

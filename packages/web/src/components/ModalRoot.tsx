@@ -5,6 +5,7 @@ import { HostEditor } from './HostEditor';
 import { CaseEditor } from './CaseEditor';
 import { MenuModal } from './MenuModal';
 import { ImportDialog } from './ImportDialog';
+import { AttachmentUploadDialog, AttachmentDetailDialog } from './AttachmentDialogs';
 
 export function ModalRoot() {
   const modal = useUiStore((s) => s.modal);
@@ -34,6 +35,22 @@ export function ModalRoot() {
           parsed={modal.parsed}
           fileName={modal.fileName}
           fileHandle={modal.fileHandle}
+        />
+      );
+    case 'attach-upload':
+      return (
+        <AttachmentUploadDialog
+          targetKind={modal.targetKind}
+          targetId={modal.targetId}
+          onClose={() => (modal.returnTo ? openModal(modal.returnTo) : closeModal())}
+        />
+      );
+    case 'attachment':
+      return (
+        <AttachmentDetailDialog
+          key={modal.id}
+          id={modal.id}
+          onClose={() => (modal.returnTo ? openModal(modal.returnTo) : closeModal())}
         />
       );
     case 'confirm':

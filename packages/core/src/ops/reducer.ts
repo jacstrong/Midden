@@ -111,6 +111,11 @@ export function apply(state: CaseState, op: Op): CaseState {
     case 'attachment.add':
       if (state.attachments[op.att.id]) return state;
       return { ...state, attachments: { ...state.attachments, [op.att.id]: op.att } };
+    case 'attachment.set': {
+      const a = state.attachments[op.id];
+      if (!a) return state;
+      return { ...state, attachments: { ...state.attachments, [op.id]: patched(a, op.patch) } };
+    }
     case 'attachment.remove':
       if (!state.attachments[op.id]) return state;
       return { ...state, attachments: without(state.attachments, op.id) };
@@ -176,6 +181,10 @@ export function inverse(state: CaseState, op: Op): Op {
         : NOOP;
     case 'attachment.add':
       return state.attachments[op.att.id] ? NOOP : { type: 'attachment.remove', id: op.att.id };
+    case 'attachment.set': {
+      const a = state.attachments[op.id];
+      return a ? { type: 'attachment.set', id: op.id, patch: priorOf(a, op.patch) } : NOOP;
+    }
     case 'attachment.remove': {
       const a = state.attachments[op.id];
       return a ? { type: 'attachment.add', att: a } : NOOP;

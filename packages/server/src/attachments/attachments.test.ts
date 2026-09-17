@@ -235,7 +235,7 @@ describe('attachment routes', () => {
     });
     const att = res.json().attachment;
     expect(att.mime).toBe('text/plain');
-    expect(att.dangerous).toBeUndefined();
+    expect(att.dangerous).toBe(false);
     const dl = await app.inject({
       method: 'GET',
       url: `/api/cases/${caseId}/attachments/${att.id}`,
@@ -325,9 +325,10 @@ describe('attachment routes', () => {
     });
     expect(state.json().state.attachments[att.id].dangerous).toBe(true);
 
-    // what is stored is the sample itself: the hash an analyst records is the sample's hash
+    // what is stored is the sample itself: the hashes an analyst records are the sample's hashes
     const { createHash } = await import('node:crypto');
     expect(att.sha256).toBe(createHash('sha256').update(EXE).digest('hex'));
+    expect(att.md5).toBe(createHash('md5').update(EXE).digest('hex'));
 
     const dl = await app.inject({
       method: 'GET',
@@ -371,6 +372,80 @@ describe('attachment routes', () => {
     });
     expect(dl.headers['content-type']).toContain('application/zip');
     expect(dl.headers['content-disposition']).toBe('attachment; filename="lure.png.zip"');
+  });
+
+  it('keeps a custody record: uploader name, note on upload, and a note edited through the op log', async () => {
+    const res = await upload(
+      ann,
+      { name: 'auth.log', content: 'login failed\n' },
+      {
+        targetKind: 'event',
+        targetId: 'ev_1',
+        note: 'Pulled from the DC at 14:02, sha verified on host',
+      },
+    );
+    expect(res.statusCode).toBe(201);
+    const att = res.json().attachment;
+    expect(att).toMatchObject({
+      uploadedBy: expect.any(String),
+      uploadedByName: 'ANN',
+      note: 'Pulled from the DC at 14:02, sha verified on host',
+      dangerous: false,
+    });
+    expect(att.md5).toMatch(/^[0-9a-f]{32}$/);
+
+    // the note is the one editable field, and it edits like everything else: an op
+    const set = await app.inject({
+      method: 'POST',
+      url: `/api/cases/${caseId}/ops`,
+      ...as(ann),
+      payload: {
+        op: { type: 'attachment.set', id: att.id, patch: { note: 'Re-checked: benign' } },
+      },
+    });
+    expect(set.statusCode).toBe(200);
+    const state = await app.inject({
+      method: 'GET',
+      url: `/api/cases/${caseId}/state`,
+      ...as(vic),
+    });
+    expect(state.json().state.attachments[att.id].note).toBe('Re-checked: benign');
+    // and the projected row, which the REST list reads, followed it
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/cases/${caseId}/attachments`,
+      ...as(vic),
+    });
+    expect(list.json().attachments.find((a: { id: string }) => a.id === att.id).note).toBe(
+      'Re-checked: benign',
+    );
+
+    // viewers cannot edit the note, and the note is the only thing anyone can patch: other keys
+    // are dropped before the op is applied, the same as every patch schema in core
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/cases/${caseId}/ops`,
+          ...as(vic),
+          payload: { op: { type: 'attachment.set', id: att.id, patch: { note: 'x' } } },
+        })
+      ).statusCode,
+    ).toBe(403);
+    await app.inject({
+      method: 'POST',
+      url: `/api/cases/${caseId}/ops`,
+      ...as(ann),
+      payload: {
+        op: { type: 'attachment.set', id: att.id, patch: { note: 'y', dangerous: true, md5: '0' } },
+      },
+    });
+    const after = (
+      await app.inject({ method: 'GET', url: `/api/cases/${caseId}/state`, ...as(ann) })
+    ).json().state.attachments[att.id];
+    expect(after.note).toBe('y');
+    expect(after.dangerous).toBe(false);
+    expect(after.md5).toBe(att.md5);
   });
 
   it('shares one blob between identical attachments and keeps it until both are gone', async () => {

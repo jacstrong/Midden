@@ -10,13 +10,21 @@ import { nowIso } from '../lib/ids.js';
 interface Touched {
   hosts: Set<string>;
   events: Set<string>;
+  /** Attachment rows are written by the upload route; only the editable fields project here. */
+  attachments: Set<string>;
   links: boolean;
   caseMeta: boolean;
 }
 
 export function touchedEntities(
   op: Op,
-  t: Touched = { hosts: new Set(), events: new Set(), links: false, caseMeta: false },
+  t: Touched = {
+    hosts: new Set(),
+    events: new Set(),
+    attachments: new Set(),
+    links: false,
+    caseMeta: false,
+  },
 ): Touched {
   switch (op.type) {
     case 'case.set':
@@ -45,6 +53,9 @@ export function touchedEntities(
     case 'link.remove':
       t.links = true;
       break;
+    case 'attachment.set':
+      t.attachments.add(op.id);
+      break;
     case 'batch':
       for (const o of op.ops) touchedEntities(o, t);
       break;
@@ -68,6 +79,11 @@ export function projectOp(
   if (t.caseMeta) upsertCaseMeta(db, caseId, next, ts);
   for (const id of t.hosts) upsertHost(db, caseId, id, next, ts);
   for (const id of t.events) upsertEvent(db, caseId, id, next, ts);
+  for (const id of t.attachments) {
+    const a = next.attachments[id];
+    if (a)
+      db.run('UPDATE attachments SET note = ? WHERE id = ? AND case_id = ?', a.note, id, caseId);
+  }
   if (t.links) rebuildHostIps(db, caseId, next);
   db.run('UPDATE cases SET modified_at = ? WHERE id = ?', ts, caseId);
 }

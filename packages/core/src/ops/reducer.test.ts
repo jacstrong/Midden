@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { apply, applyAll, emptyState, inverse } from './reducer.js';
 import { parseOp, opSize, touchedFields, type Op } from './ops.js';
-import type { CaseState, Event, Host } from '../domain/types.js';
+import type { AttachmentMeta, CaseState, Event, Host } from '../domain/types.js';
 
 const host = (id: string, extra: Partial<Host> = {}): Host => ({
   id,
@@ -151,8 +151,29 @@ const arbEventPatch = fc.record(
   { requiredKeys: [] },
 );
 
+const arbAttachment = arbId.map((id): AttachmentMeta => ({
+  id,
+  sha256: 'ab'.repeat(32),
+  size: 4,
+  mime: 'text/plain',
+  name: `${id}.txt`,
+  target: { kind: 'event', id: 'a' },
+  uploadedBy: 'u1',
+  uploadedByName: 'Ann',
+  createdAt: '2026-07-14T13:00:00.000Z',
+  md5: '',
+  note: '',
+  dangerous: false,
+}));
+
 const arbLeafOp: fc.Arbitrary<Op> = fc.oneof(
   fc.constant<Op>({ type: 'noop' }),
+  arbAttachment.map((att): Op => ({ type: 'attachment.add', att })),
+  fc
+    .tuple(arbId, fc.record({ note: arbStr }, { requiredKeys: [] }))
+    .map(([id, patch]): Op => ({ type: 'attachment.set', id, patch })),
+  arbId.map((id): Op => ({ type: 'attachment.remove', id })),
+
   fc
     .record({ name: arbStr, summary: arbStr }, { requiredKeys: [] })
     .map((patch): Op => ({ type: 'case.set', patch })),
