@@ -23,6 +23,7 @@ import { ServerStore } from './store/ServerStore';
 import { useTerrain } from './store/useTerrain';
 import { MemoryTerrain, ServerTerrain } from './lib/terrain';
 import { LocalFileStore } from './store/LocalFileStore';
+import { restoreAutosave, startAutosave } from './lib/autosave';
 import { useHashRouter, useRoute } from './lib/router';
 import { useKeyboard, useUnloadGuard } from './lib/useKeyboard';
 import { runWorkerSelfTest } from './workers/nmap';
@@ -42,7 +43,28 @@ export function App() {
     document.documentElement.dataset.version = __MIDDEN_VERSION__;
     if (__MIDDEN_MODE__ === 'standalone') runWorkerSelfTest();
   }, []);
-  return __MIDDEN_MODE__ === 'standalone' ? <CaseShell /> : <HostedApp />;
+  return __MIDDEN_MODE__ === 'standalone' ? <StandaloneApp /> : <HostedApp />;
+}
+
+/** Restore the last session's work from this browser, then keep saving it as it changes. */
+function StandaloneApp() {
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    void restoreAutosave().then((restored) => {
+      if (cancelled) return;
+      if (restored) {
+        const when = restored.savedAt ? new Date(restored.savedAt).toLocaleString() : 'earlier';
+        toast(`Restored your work from ${when} (${restored.events} events)`);
+      }
+      stop = startAutosave();
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
+  return <CaseShell />;
 }
 
 function HostedApp() {

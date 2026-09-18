@@ -380,8 +380,16 @@ test.describe('hosted collaboration', () => {
     await bob.goto(url);
     await expect(bob.locator('#caseName')).toHaveValue('Reconnect Case');
 
+    // the light is green with a live connection, and says so on hover
+    await expect(bob.getByTestId('status-light')).toHaveAttribute('data-tone', 'ok');
+    await bob.getByTestId('status-light').hover();
+    await expect(bob.getByRole('tooltip')).toContainText(/live connection/i);
+
     await bob.context().setOffline(true);
     await expect(bob.getByTestId('banner-offline')).toBeVisible({ timeout: 20_000 });
+    await expect(bob.getByTestId('status-light')).toHaveAttribute('data-tone', 'bad');
+    await bob.getByTestId('status-light').hover();
+    await expect(bob.getByRole('tooltip')).toContainText(/cannot be reached|reaching the server/i);
     // ann keeps working
     await ann.keyboard.press('h');
     await ann.getByRole('dialog').getByLabel('Hostname', { exact: true }).fill('WHILE-OFFLINE');
@@ -396,6 +404,7 @@ test.describe('hosted collaboration', () => {
 
     await bob.context().setOffline(false);
     await expect(bob.getByTestId('banner-offline')).toBeHidden({ timeout: 15000 });
+    await expect(bob.getByTestId('status-light')).toHaveAttribute('data-tone', 'ok');
     await expect(bob.getByTestId('st-hosts')).toHaveText('1');
     await bob.getByTestId('tab-hosts').click();
     await expect(bob.getByTestId('host-card')).toContainText('WHILE-OFFLINE');

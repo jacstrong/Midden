@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useUiStore } from '../store/useUiStore';
 import { useCaseStore } from '../store/useCaseStore';
+import { useAutosave } from './autosave';
 import { exportJson } from './caseActions';
 
 /** N new event · H new host · / search · Ctrl+S save · Esc close. */
@@ -44,12 +45,16 @@ export function useKeyboard(): void {
   }, []);
 }
 
-/** Warn before leaving with unsaved file-based changes. */
+/**
+ * Warn before leaving with unsaved file-based changes, but only when they would actually be
+ * lost: work that autosave has in this browser comes back on the next load.
+ */
 export function useUnloadGuard(): void {
   useEffect(() => {
     const onUnload = (ev: BeforeUnloadEvent): void => {
       const cs = useCaseStore.getState();
       if (!cs.dirty || !cs.capabilities.fileBased) return;
+      if (useAutosave.getState().status.kind === 'saved') return;
       ev.preventDefault();
     };
     window.addEventListener('beforeunload', onUnload);

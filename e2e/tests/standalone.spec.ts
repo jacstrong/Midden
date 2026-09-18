@@ -277,19 +277,74 @@ test.describe('standalone single-file build', () => {
     await expect(page.getByTestId('builder-error')).toContainText('need root');
   });
 
-  test('warns before leaving with unsaved changes', async ({ page }) => {
+  test('keeps work in the browser across a reload and a closed tab', async ({ page }) => {
     await open(page);
+    await expect(page.getByTestId('status-light')).toHaveAttribute('data-tone', 'local');
     await page.getByTestId('load-demo').click();
     await page.keyboard.press('h');
-    await page.getByRole('dialog').getByLabel('Hostname', { exact: true }).fill('NEW-HOST');
+    await page.getByRole('dialog').getByLabel('Hostname', { exact: true }).fill('SURVIVOR-01');
     await page.getByTestId('host-save').click();
-    await expect(page.getByTestId('dirty')).toHaveClass(/on/);
-    page.on('dialog', (d) => void d.dismiss());
-    await page.evaluate(() =>
-      window.dispatchEvent(new Event('beforeunload', { cancelable: true })),
-    );
-    // still here
+    await expect(page.getByTestId('st-hosts')).toHaveText('6');
+    // the light says where the work is
+    await page.getByTestId('status-light').hover();
+    await expect(page.getByRole('tooltip')).toContainText(/kept in this browser/i);
+
+    await page.reload();
     await expect(page.locator('.brand b')).toHaveText('MIDDEN');
+    await expect(page.getByText(/Restored your work/)).toBeVisible();
+    await expect(page.getByTestId('st-hosts')).toHaveText('6');
+    await page.getByTestId('tab-hosts').click();
+    await expect(page.locator('.hcard', { hasText: 'SURVIVOR-01' })).toBeVisible();
+    // it was never saved to a file, and the app still knows that
+    await expect(page.getByTestId('dirty')).toHaveClass(/on/);
+
+    // a closed tab is the same story: a new page in the same browser profile gets it back
+    const again = await page.context().newPage();
+    await page.close();
+    await again.goto(pathToFileURL(STANDALONE).href);
+    await expect(again.getByTestId('st-hosts')).toHaveText('6');
+  });
+
+  test('warns before leaving only when the work would actually be lost', async ({ browser }) => {
+    const prevented = (p: Page): Promise<boolean> =>
+      p.evaluate(() => {
+        const ev = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      });
+    const edit = async (p: Page): Promise<void> => {
+      await p.getByTestId('load-demo').click();
+      await p.keyboard.press('h');
+      await p.getByRole('dialog').getByLabel('Hostname', { exact: true }).fill('NEW-HOST');
+      await p.getByTestId('host-save').click();
+      await expect(p.getByTestId('dirty')).toHaveClass(/on/);
+    };
+
+    // autosave working: the work is safe in the browser, so leaving is not interrupted
+    const page = await (await browser.newContext()).newPage();
+    await open(page);
+    await edit(page);
+    await page.getByTestId('status-light').hover();
+    await expect(page.getByRole('tooltip')).toContainText(/kept in this browser/i);
+    expect(await prevented(page)).toBe(false);
+    await page.context().close();
+
+    // storage blocked (a locked-down or private browser): the warning is all that stands
+    // between the analyst and losing the work, so it stays
+    const locked = await (await browser.newContext()).newPage();
+    await locked.addInitScript(() => {
+      Object.defineProperty(window, 'localStorage', {
+        get() {
+          throw new DOMException('The operation is insecure.', 'SecurityError');
+        },
+      });
+    });
+    await open(locked);
+    await edit(locked);
+    await locked.getByTestId('status-light').hover();
+    await expect(locked.getByRole('tooltip')).toContainText(/will not keep your work/i);
+    expect(await prevented(locked)).toBe(true);
+    await locked.context().close();
   });
 
   test('keeps the timeline virtualized with thousands of events', async ({ page }) => {

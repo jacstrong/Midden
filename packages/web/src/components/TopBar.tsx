@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { StatusLight } from './StatusLight';
 import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore } from '../store/useUiStore';
 import { exportJson, openCaseFile } from '../lib/caseActions';
@@ -69,7 +70,7 @@ export function TopBar() {
         onClick={() => multiUser && navigate({ kind: 'cases' })}
         title={multiUser ? 'All cases' : undefined}
       >
-        <i className="dot" />
+        <StatusLight />
         <b>MIDDEN</b>
         <span>{multiUser ? '← Cases' : 'Attack Reconstruction'}</span>
       </div>
