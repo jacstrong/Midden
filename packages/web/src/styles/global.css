@@ -130,13 +130,70 @@ textarea {
   color: var(--dimmer);
   text-transform: uppercase;
 }
+.brand .light {
+  --lightc: var(--gr);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 6px; /* a hover target bigger than the dot */
+  margin: -6px;
+  cursor: help;
+}
+.brand .light.local {
+  --lightc: var(--vi);
+}
+.brand .light.ok {
+  --lightc: var(--gr);
+}
+.brand .light.bad {
+  --lightc: var(--rd);
+}
+.brand .light.warn {
+  --lightc: var(--am);
+}
 .brand .dot {
   width: 7px;
   height: 7px;
-  background: var(--gr);
-  box-shadow: 0 0 10px var(--gr);
-  align-self: center;
+  background: var(--lightc);
+  box-shadow: 0 0 10px var(--lightc);
   animation: pulse 2.6s infinite;
+}
+.brand .light.bad .dot {
+  animation-duration: 0.9s;
+}
+.brand .tip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 300px;
+  padding: 9px 11px;
+  background: var(--panel2);
+  border: 1px solid var(--line2);
+  border-left: 3px solid var(--lightc);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.55;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+  white-space: normal;
+  z-index: 40;
+}
+.brand .tip .tiptitle {
+  display: block;
+  color: var(--lightc);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  text-shadow: none;
+}
+.brand .light:hover .tip,
+.brand .light:focus-within .tip {
+  display: block;
 }
 @keyframes pulse {
   0%,
