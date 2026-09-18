@@ -100,7 +100,16 @@ export const AttachmentMetaSchema = z.object({
   name: str,
   target: AttachmentTargetSchema,
   uploadedBy: str,
+  uploadedByName: str,
   createdAt: str,
+  // Every field present with a default, like hosts and events: an inverse patch can only set a
+  // key back to a prior value, never remove it, so optional keys would break revert.
+  md5: z
+    .string()
+    .regex(/^([0-9a-f]{32})?$/)
+    .default(''),
+  note: str,
+  dangerous: z.boolean().default(false),
 });
 
 export const CaseStateSchema = z.object({
@@ -167,6 +176,8 @@ export const EventPatchSchema = z
     notes: s,
   })
   .partial();
+/** Only the note is editable after upload; the bytes, hashes and danger flag are the record. */
+export const AttachmentPatchSchema = z.object({ note: s }).partial();
 export const ScanPatchSchema = z
   .object({
     name: s,

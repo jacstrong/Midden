@@ -9,6 +9,7 @@ function describe(op: Op, state: ReturnType<typeof useCaseStore.getState>['state
   const hostName = (id: string): string => state.hosts[id]?.name ?? id;
   const eventName = (id: string): string =>
     state.events[id]?.activity || state.events[id]?.indicator || id;
+  const attachmentName = (id: string): string => state.attachments[id]?.name ?? id;
   switch (op.type) {
     case 'case.set':
       return `Case details: ${definedKeys(op.patch).join(', ')}`;
@@ -36,6 +37,8 @@ function describe(op: Op, state: ReturnType<typeof useCaseStore.getState>['state
       return `Unlinked ${hostName(op.hostId)} from ${op.ip}`;
     case 'attachment.add':
       return `Attached ${op.att.name}`;
+    case 'attachment.set':
+      return `Attachment ${attachmentName(op.id)}: ${definedKeys(op.patch).join(', ')}`;
     case 'attachment.remove':
       return `Removed attachment ${op.id}`;
     case 'batch':
@@ -52,7 +55,8 @@ function values(op: Op): Record<string, unknown> | null {
     op.type === 'host.set' ||
     op.type === 'event.set' ||
     op.type === 'case.set' ||
-    op.type === 'scan.set'
+    op.type === 'scan.set' ||
+    op.type === 'attachment.set'
   )
     return op.patch as Record<string, unknown>;
   return null;

@@ -193,6 +193,7 @@ textarea {
 }
 
 .btn {
+  text-decoration: none; /* the download link is an anchor styled as a button */
   background: #0c1524;
   border: 1px solid var(--line2);
   color: var(--ink);
@@ -1479,14 +1480,15 @@ kbd {
   width: 132px;
   display: flex;
   flex-direction: column;
-}
-.attach a {
-  display: flex;
-  flex-direction: column;
   gap: 4px;
   padding: 6px;
-  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
   color: var(--ink);
+  transition: border-color 0.14s;
+}
+.attach:hover {
+  border-color: var(--line2);
 }
 .attach img {
   width: 100%;
@@ -1515,7 +1517,87 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 6px 6px;
   color: var(--dim);
   font-size: 9.5px;
+}
+
+/* ---------- dangerous attachments ---------- */
+.attach.dangerous {
+  border-color: rgba(255, 77, 94, 0.55);
+}
+.attach.dangerous .attachicon {
+  color: var(--rd);
+  border-color: rgba(255, 77, 94, 0.4);
+}
+.dangerbadge {
+  color: var(--rd);
+  align-self: flex-start;
+}
+.attach.dangerous:hover {
+  border-color: var(--rd);
+}
+.modal-danger .modal {
+  border-color: var(--rd);
+  box-shadow:
+    0 0 0 1px rgba(255, 77, 94, 0.35),
+    0 0 40px rgba(255, 77, 94, 0.18);
+}
+.dangernote {
+  border: 1px solid rgba(255, 77, 94, 0.5);
+  border-left: 3px solid var(--rd);
+  background: rgba(255, 77, 94, 0.07);
+  padding: 8px 10px;
+  margin: 8px 0 12px;
+  line-height: 1.6;
+}
+.dangernote b {
+  color: var(--rd);
+}
+.dangernote .pw {
+  color: var(--am);
+  background: rgba(255, 176, 32, 0.1);
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.filepick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.filepick .filename {
+  word-break: break-all;
+}
+.dimmer {
+  color: var(--dimmer);
+}
+.attachkv dd {
+  min-width: 0;
+}
+.hashrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.hash {
+  font-size: 10.5px;
+  word-break: break-all;
+  color: var(--ink);
+  user-select: all;
+}
+.attachpreview img {
+  max-width: 100%;
+  max-height: 260px;
+  display: block;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  background: #04070d;
+}
+.notetext {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
 }

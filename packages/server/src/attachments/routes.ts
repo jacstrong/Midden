@@ -2,14 +2,15 @@
  * Evidence attachments on events and hosts. Files live in the content-addressed blob store;
  * the case only carries metadata, which travels through the op log like everything else.
  */
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AttachmentMeta, Op } from '@midden/core';
 import { accessOrThrow } from '../cases/routes.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { TooLargeError } from '../blobs/store.js';
-import { safeFilename, sniffMime } from './mime.js';
+import { dangerReason, safeFilename, sniffMime } from './mime.js';
+import { INFECTED_PASSWORD, crc32Of, encryptedZipLength, encryptedZipStream } from './zip.js';
 
 const TargetKind = z.enum(['event', 'host']);
 
@@ -25,6 +26,10 @@ interface AttachmentRow {
   uploaded_by: string;
   created_at: string;
   deleted_at: string | null;
+  dangerous: number;
+  md5: string;
+  uploaded_by_name: string;
+  note: string;
 }
 
 const rowToMeta = (r: AttachmentRow): AttachmentMeta => ({
@@ -35,7 +40,11 @@ const rowToMeta = (r: AttachmentRow): AttachmentMeta => ({
   name: r.name,
   target: { kind: r.target_kind, id: r.target_id },
   uploadedBy: r.uploaded_by,
+  uploadedByName: r.uploaded_by_name,
   createdAt: r.created_at,
+  md5: r.md5,
+  note: r.note,
+  dangerous: !!r.dangerous,
 });
 
 export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
@@ -52,10 +61,12 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
     const caseId = req.params.id;
     const maxBytes = app.cfg.maxUploadMb * 1_048_576;
-    let stored: { sha256: string; size: number; path: string } | null = null;
+    let stored: { sha256: string; md5: string; size: number; path: string } | null = null;
     let filename = 'evidence';
     let targetKind: string | undefined;
     let targetId: string | undefined;
+    let flagged = false;
+    let note = '';
 
     for await (const part of req.parts({ limits: { fileSize: maxBytes, files: 1 } })) {
       if (part.type === 'file') {
@@ -76,6 +87,9 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         }
       } else if (part.fieldname === 'targetKind') targetKind = String(part.value);
       else if (part.fieldname === 'targetId') targetId = String(part.value);
+      else if (part.fieldname === 'dangerous')
+        flagged = /^(1|true|on|yes)$/i.test(String(part.value));
+      else if (part.fieldname === 'note') note = String(part.value).slice(0, 4000);
     }
 
     const fail = async (e: HttpError): Promise<never> => {
@@ -110,7 +124,11 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         ),
       );
 
-    const { mime } = sniffMime(await readHead(app, stored.sha256));
+    const head = await readHead(app, stored.sha256);
+    const { mime } = sniffMime(head);
+    // The uploader's word or the bytes themselves; either is enough to wrap every download.
+    const reason = dangerReason(head, filename);
+    const dangerous = flagged || reason !== null;
     const meta: AttachmentMeta = {
       id: newId('att'),
       sha256: stored.sha256,
@@ -119,10 +137,14 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       name: safeFilename(filename),
       target: { kind: kind.data!, id: targetId! },
       uploadedBy: user.id,
+      uploadedByName: user.displayName,
       createdAt: nowIso(),
+      md5: stored.md5,
+      note,
+      dangerous,
     };
     app.db.run(
-      'INSERT INTO attachments (id, case_id, sha256, size, mime, name, target_kind, target_id, uploaded_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO attachments (id, case_id, sha256, size, mime, name, target_kind, target_id, uploaded_by, created_at, dangerous, md5, uploaded_by_name, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       meta.id,
       caseId,
       meta.sha256,
@@ -133,6 +155,10 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       meta.target.id,
       meta.uploadedBy,
       meta.createdAt,
+      dangerous ? 1 : 0,
+      meta.md5,
+      meta.uploadedByName,
+      meta.note,
     );
     const r = rt.appendOp(
       { id: user.id, name: user.displayName },
@@ -146,7 +172,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
     }
     rt.broadcast({ t: 'op', ...r.broadcast });
     reply.status(201);
-    return { attachment: meta };
+    return { attachment: meta, dangerReason: reason };
   });
 
   app.get<{ Params: { id: string; attId: string } }>(
@@ -159,6 +185,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
         req.params.id,
       );
       if (!row) throw notFound('No such attachment');
+      if (row.dangerous) return sendWrapped(app, reply, row);
       const { mime, inlineImage } = sniffMime(await readHead(app, row.sha256));
       // Only recognised images render inline; anything else downloads, so uploaded markup can never execute.
       return reply
@@ -197,6 +224,26 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       return { ok: true };
     },
   );
+}
+
+/**
+ * A dangerous attachment never leaves the server bare. The stored bytes are the sample itself,
+ * so its hash stays meaningful; what the analyst downloads is that file inside an encrypted zip
+ * with the password `infected`, which no double-click can run and no workstation scanner eats.
+ */
+async function sendWrapped(app: FastifyInstance, reply: FastifyReply, row: AttachmentRow) {
+  const inner = safeFilename(row.name);
+  const size = Number(row.size);
+  const crc32 = await crc32Of(app.blobs.open(row.sha256));
+  const entry = { name: inner, size, crc32, mtime: new Date(row.created_at) };
+  return reply
+    .type('application/zip')
+    .header('x-content-type-options', 'nosniff')
+    .header('content-security-policy', "default-src 'none'; sandbox")
+    .header('content-length', String(encryptedZipLength(entry)))
+    .header('content-disposition', `attachment; filename="${inner}.zip"`)
+    .header('x-midden-dangerous', '1')
+    .send(encryptedZipStream(entry, app.blobs.open(row.sha256), INFECTED_PASSWORD));
 }
 
 async function readHead(app: FastifyInstance, sha256: string): Promise<Buffer> {

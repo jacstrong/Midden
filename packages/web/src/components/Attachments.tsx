@@ -1,18 +1,12 @@
-import { useRef, useState } from 'react';
 import type { AttachmentMeta } from '@midden/core';
-import { api, ApiError, apiUpload } from '../lib/api';
 import { useCaseStore } from '../store/useCaseStore';
-import { useUiStore } from '../store/useUiStore';
-import { toast } from '../store/useToasts';
+import { useUiStore, type ModalState } from '../store/useUiStore';
+import { humanSize } from './AttachmentDialogs';
 
-const KB = 1024;
-function humanSize(bytes: number): string {
-  if (bytes < KB) return `${bytes} B`;
-  if (bytes < KB * KB) return `${(bytes / KB).toFixed(0)} KB`;
-  return `${(bytes / (KB * KB)).toFixed(1)} MB`;
-}
-
-/** Evidence files attached to one event or host. Hosted mode only; the standalone has no blob store. */
+/**
+ * Evidence files attached to one event or host. Hosted mode only; the standalone has no blob
+ * store. Uploading and inspecting happen in their own dialogs, which return to this editor.
+ */
 export function Attachments({
   targetKind,
   targetId,
@@ -24,46 +18,15 @@ export function Attachments({
   const canAttach = useCaseStore((s) => s.capabilities.attachments);
   const canEdit = useCaseStore((s) => s.access.edit);
   const all = useCaseStore((s) => s.state.attachments);
-  const confirm = useUiStore((s) => s.confirm);
-  const input = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  const modal = useUiStore((s) => s.modal);
+  const openModal = useUiStore((s) => s.openModal);
 
   if (!canAttach || !caseId) return null;
   const items = Object.values(all).filter(
     (a) => a.target.kind === targetKind && a.target.id === targetId,
   );
-
-  const upload = async (file: File): Promise<void> => {
-    setBusy(true);
-    const form = new FormData();
-    form.append('file', file, file.name);
-    form.append('targetKind', targetKind);
-    form.append('targetId', targetId);
-    try {
-      await apiUpload<{ attachment: AttachmentMeta }>(`/api/cases/${caseId}/attachments`, form);
-      toast(`Attached ${file.name}`);
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'Upload failed', 'bad');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = (a: AttachmentMeta): void => {
-    confirm(
-      'Remove attachment',
-      `Remove ${a.name} from this ${targetKind}? The file is deleted from the server.`,
-      'Remove',
-      () => {
-        void api('DELETE', `/api/cases/${caseId}/attachments/${a.id}`)
-          .then(() => toast('Attachment removed', 'warn'))
-          .catch((err: unknown) =>
-            toast(err instanceof ApiError ? err.message : 'Could not remove it', 'bad'),
-          );
-      },
-      true,
-    );
-  };
+  const returnTo: ModalState | undefined = modal.kind === 'none' ? undefined : modal;
+  const open = (a: AttachmentMeta): void => openModal({ kind: 'attachment', id: a.id, returnTo });
 
   return (
     <fieldset className="fs">
@@ -76,58 +39,48 @@ export function Attachments({
       <div className="attachgrid">
         {items.map((a) => {
           const href = `/api/cases/${caseId}/attachments/${a.id}`;
-          const isImage = a.mime.startsWith('image/');
+          const isImage = a.mime.startsWith('image/') && !a.dangerous;
           return (
-            <div key={a.id} className="attach" data-testid="attachment">
-              <a href={href} target="_blank" rel="noopener" title={`${a.name} · ${a.mime}`}>
-                {isImage ? (
-                  <img src={href} alt={a.name} />
-                ) : (
-                  <span className="attachicon">
-                    {a.mime.includes('pdf') ? 'PDF' : a.mime.startsWith('text/') ? 'TXT' : 'FILE'}
-                  </span>
-                )}
-                <span className="attachname">{a.name}</span>
-              </a>
+            <button
+              key={a.id}
+              type="button"
+              className={a.dangerous ? 'attach dangerous' : 'attach'}
+              onClick={() => open(a)}
+              title={a.note ? `${a.name}\n${a.note}` : a.name}
+              data-testid="attachment"
+              data-dangerous={a.dangerous ? '1' : undefined}
+            >
+              {isImage ? (
+                <img src={href} alt={a.name} />
+              ) : (
+                <span className="attachicon">
+                  {a.dangerous
+                    ? 'ZIP'
+                    : a.mime.includes('pdf')
+                      ? 'PDF'
+                      : a.mime.startsWith('text/')
+                        ? 'TXT'
+                        : 'FILE'}
+                </span>
+              )}
+              <span className="attachname">{a.name}</span>
               <span className="attachmeta">
                 {humanSize(a.size)}
-                {canEdit && (
-                  <button
-                    className="btn sm ghost"
-                    onClick={() => remove(a)}
-                    data-testid="attachment-remove"
-                  >
-                    ✕
-                  </button>
-                )}
+                {a.dangerous && <span className="badge dangerbadge">dangerous</span>}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
       {canEdit && (
-        <>
-          <button
-            className="btn"
-            disabled={busy}
-            onClick={() => input.current?.click()}
-            style={{ marginTop: 8 }}
-            data-testid="attach-file"
-          >
-            {busy ? 'Uploading…' : '+ Attach a file'}
-          </button>
-          <input
-            ref={input}
-            type="file"
-            style={{ display: 'none' }}
-            data-testid="attach-input"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = '';
-              if (f) void upload(f);
-            }}
-          />
-        </>
+        <button
+          className="btn"
+          style={{ marginTop: 8 }}
+          onClick={() => openModal({ kind: 'attach-upload', targetKind, targetId, returnTo })}
+          data-testid="attach-file"
+        >
+          + Attach a file
+        </button>
       )}
     </fieldset>
   );

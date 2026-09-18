@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import type {
   AttachmentMeta,
+  AttachmentFields,
   CaseMeta,
   Event,
   EventFields,
@@ -24,6 +25,7 @@ import {
   LinkSchema,
   ScanMetaSchema,
   ScanPatchSchema,
+  AttachmentPatchSchema,
 } from '../domain/schemas.js';
 
 export const MAX_BATCH = 5000;
@@ -45,6 +47,7 @@ export type Op =
   | { type: 'link.set'; hostId: string; ip: string }
   | { type: 'link.remove'; hostId: string; ip: string }
   | { type: 'attachment.add'; att: AttachmentMeta }
+  | { type: 'attachment.set'; id: string; patch: Patch<AttachmentFields> }
   | { type: 'attachment.remove'; id: string }
   | { type: 'batch'; ops: Op[] }
   | { type: 'op.revert'; targetSeq: number; inverse: Op };
@@ -73,6 +76,7 @@ export const OpSchema: z.ZodType<Op> = z.lazy(() =>
     z.object({ type: z.literal('link.set') }).extend(LinkSchema.shape),
     z.object({ type: z.literal('link.remove') }).extend(LinkSchema.shape),
     z.object({ type: z.literal('attachment.add'), att: AttachmentMetaSchema }),
+    z.object({ type: z.literal('attachment.set'), id, patch: AttachmentPatchSchema }),
     z.object({ type: z.literal('attachment.remove'), id }),
     z.object({ type: z.literal('batch'), ops: z.array(OpSchema) }),
     z.object({
@@ -105,6 +109,8 @@ export function touchedFields(op: Op): string[] {
     case 'event.set':
       return definedKeys(op.patch).map((k) => `${op.id}/${k}`);
     case 'scan.set':
+      return definedKeys(op.patch).map((k) => `${op.id}/${k}`);
+    case 'attachment.set':
       return definedKeys(op.patch).map((k) => `${op.id}/${k}`);
     case 'host.add':
       return [`${op.host.id}/*`];

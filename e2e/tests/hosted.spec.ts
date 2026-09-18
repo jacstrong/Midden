@@ -263,9 +263,30 @@ test.describe('hosted collaboration', () => {
         '05fe02fea7a3a0e40000000049454e44ae426082',
       'hex',
     );
-    await ann
-      .getByTestId('attach-input')
-      .setInputFiles({ name: 'lsass.png', mimeType: 'image/png', buffer: png });
+    // uploading goes through its own dialog: pick the file, write a note, upload; it then
+    // returns to the event editor rather than closing it
+    const attach = async (
+      page: typeof ann,
+      file: { name: string; mimeType: string; buffer: Buffer },
+      note = '',
+      dangerous = false,
+    ): Promise<void> => {
+      await page.getByTestId('attach-file').click();
+      await page.getByTestId('attach-input').setInputFiles(file);
+      await expect(page.getByTestId('attach-chosen')).toContainText(file.name);
+      if (note) await page.getByTestId('attach-note').fill(note);
+      if (dangerous) {
+        await page.getByTestId('attach-dangerous').check();
+        await expect(page.getByTestId('danger-notice')).toContainText('infected');
+      }
+      await page.getByTestId('attach-submit').click();
+      await expect(page.getByTestId('event-save')).toBeVisible();
+    };
+    await attach(
+      ann,
+      { name: 'lsass.png', mimeType: 'image/png', buffer: png },
+      'Screenshot of the procdump alert',
+    );
     await expect(ann.getByTestId('attachment')).toHaveCount(1);
     await expect(ann.getByTestId('attachment')).toContainText('lsass.png');
 
@@ -275,24 +296,73 @@ test.describe('hosted collaboration', () => {
     await expect(bob.getByRole('dialog')).toBeVisible();
     await expect(bob.getByTestId('attachment')).toHaveCount(1);
 
+    // clicking an attachment opens its record: both hashes, the uploader, the note
+    await bob.getByTestId('attachment').first().click();
+    await expect(bob.getByTestId('hash-sha-256')).toHaveText(/^[0-9a-f]{64}$/);
+    await expect(bob.getByTestId('hash-md5')).toHaveText(/^[0-9a-f]{32}$/);
+    await expect(bob.getByRole('dialog')).toContainText(/uploaded by\s*ann/i);
+    await expect(bob.getByTestId('attachment-note')).toHaveValue(
+      'Screenshot of the procdump alert',
+    );
+    // bob edits the note; it is an op like any other, so ann sees it without reloading
+    await bob
+      .getByTestId('attachment-note')
+      .fill('Screenshot of the procdump alert, from the EDR console');
+    await bob.getByTestId('attachment-save-note').click();
+    await expect(bob.getByTestId('attachment-save-note')).toBeHidden();
+    await ann.getByTestId('attachment').first().click();
+    await expect(ann.getByTestId('attachment-note')).toHaveValue(
+      'Screenshot of the procdump alert, from the EDR console',
+    );
+    // closing the record returns to the editor, not to the graph
+    await bob.getByRole('button', { name: 'Close' }).click();
+    await expect(bob.getByTestId('event-save')).toBeVisible();
+    await ann.getByRole('button', { name: 'Close' }).click();
+    await expect(ann.getByTestId('event-save')).toBeVisible();
+
     // a file pretending to be an image is served as a download, not rendered
-    await ann.getByTestId('attach-input').setInputFiles({
+    await attach(ann, {
       name: 'notes.png',
       mimeType: 'image/png',
-      buffer: Buffer.from('<html><script>alert(1)</script></html>'),
+      buffer: Buffer.from('2026-07-14 13:02:41 4624 CORP\\j.reyes logon type 10\n'),
     });
     await expect(ann.getByTestId('attachment')).toHaveCount(2);
-    const href = await ann.getByTestId('attachment').nth(1).locator('a').getAttribute('href');
+    await ann.getByTestId('attachment').nth(1).click();
+    const href = await ann.getByTestId('attachment-download').getAttribute('href');
     const served = await ann.request.get(`${BASE}${href}`);
     expect(served.headers()['content-type']).toContain('text/plain');
     expect(served.headers()['content-disposition']).toContain('attachment;');
     expect(served.headers()['x-content-type-options']).toBe('nosniff');
+    await ann.getByRole('button', { name: 'Close' }).click();
 
-    // removing it takes the file with it
-    await ann.getByTestId('attachment').nth(1).getByTestId('attachment-remove').click();
+    // an executable is flagged on sight, shown with a warning to both analysts, and every
+    // download of it is an encrypted zip rather than the sample itself
+    await attach(ann, {
+      name: 'dropper.exe',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.concat([Buffer.from('MZ\x90\x00', 'latin1'), Buffer.alloc(200, 0xcc)]),
+    });
+    await expect(ann.getByTestId('attachment')).toHaveCount(3);
+    const exe = ann.getByTestId('attachment').nth(2);
+    await expect(exe).toHaveAttribute('data-dangerous', '1');
+    await expect(exe).toContainText('dangerous');
+    await expect(bob.getByTestId('attachment').nth(2)).toHaveAttribute('data-dangerous', '1');
+    await bob.getByTestId('attachment').nth(2).click();
+    await expect(bob.getByTestId('danger-notice')).toContainText('infected');
+    await expect(bob.getByTestId('attachment-download')).toContainText('dropper.exe.zip');
+    const exeHref = await bob.getByTestId('attachment-download').getAttribute('href');
+    const wrapped = await bob.request.get(`${BASE}${exeHref}`);
+    expect(wrapped.headers()['content-type']).toContain('application/zip');
+    expect(wrapped.headers()['content-disposition']).toContain('dropper.exe.zip');
+    expect((await wrapped.body()).indexOf(Buffer.from('MZ\x90', 'latin1'))).toBe(-1);
+    await bob.getByRole('button', { name: 'Close' }).click();
+
+    // removing it from the record takes the file with it
+    await ann.getByTestId('attachment').nth(2).click();
+    await ann.getByTestId('attachment-remove').click();
     await ann.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
-    await expect(ann.getByTestId('attachment')).toHaveCount(1);
-    expect((await ann.request.get(`${BASE}${href}`)).status()).toBe(404);
+    await expect(ann.getByTestId('attachment')).toHaveCount(2);
+    expect((await ann.request.get(`${BASE}${exeHref}`)).status()).toBe(404);
 
     await ann.context().close();
     await bob.context().close();

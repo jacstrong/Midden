@@ -25,7 +25,7 @@ export class BlobStore {
   async putStream(
     input: Readable,
     opts: { maxBytes?: number | undefined } = {},
-  ): Promise<{ sha256: string; size: number; path: string; tmpPath: string }> {
+  ): Promise<{ sha256: string; md5: string; size: number; path: string; tmpPath: string }> {
     await mkdir(join(this.root, 'tmp'), { recursive: true });
     const tmpPath = join(
       this.root,
@@ -33,6 +33,7 @@ export class BlobStore {
       `upload-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
     const hash = createHash('sha256');
+    const md5 = createHash('md5'); // not for identity, only so the record carries what threat intel keys on
     let size = 0;
     const limit = opts.maxBytes ?? Number.POSITIVE_INFINITY;
     const out = createWriteStream(tmpPath);
@@ -44,6 +45,7 @@ export class BlobStore {
             size += chunk.length;
             if (size > limit) throw new TooLargeError(limit);
             hash.update(chunk);
+            md5.update(chunk);
             yield chunk;
           }
         },
@@ -64,7 +66,7 @@ export class BlobStore {
       size,
       nowIso(),
     );
-    return { sha256, size, path, tmpPath };
+    return { sha256, md5: md5.digest('hex'), size, path, tmpPath };
   }
 
   addRef(sha256: string): void {
