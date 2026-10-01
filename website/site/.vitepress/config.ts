@@ -16,7 +16,7 @@ export default defineConfig({
           text: 'Documentation',
           items: [
             { text: 'Overview', link: '/docs/' },
-            { text: 'Deployment', link: '/docs/deploy' }
+            { text: 'Deployment', link: '/docs/deploy.md' }
           ]
         }
       ]
