@@ -4,6 +4,6 @@ This section is the project documentation source that is published to GitHub Pag
 
 ## Available guides
 
-- [Deployment](./deploy.md)
+- [Deployment](./deploy)
 
 More guides will be added over time.
