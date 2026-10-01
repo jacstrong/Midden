@@ -8,5 +8,5 @@ const sourceDocsDir = path.resolve(websiteRoot, '..', 'docs')
 const outputDocsDir = path.resolve(websiteRoot, 'site', 'docs')
 
 await rm(outputDocsDir, { recursive: true, force: true })
-await mkdir(path.dirname(outputDocsDir), { recursive: true })
+await mkdir(outputDocsDir, { recursive: true })
 await cp(sourceDocsDir, outputDocsDir, { recursive: true })
