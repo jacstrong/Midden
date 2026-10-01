@@ -1,0 +1,28 @@
+:root {
+  --vp-c-bg: #06080e;
+  --vp-c-bg-soft: #0a0f19;
+  --vp-c-bg-alt: #0d1524;
+  --vp-c-divider: rgba(120, 200, 255, 0.2);
+  --vp-c-brand-1: #22e8ff;
+  --vp-c-brand-2: #7bf2ff;
+  --vp-c-brand-3: #0ecfe6;
+  --vp-home-hero-name-color: #22e8ff;
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(34, 232, 255, 0.35), transparent 65%);
+  --vp-home-hero-image-filter: blur(48px);
+}
+
+body {
+  background-image:
+    linear-gradient(rgba(34, 232, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 232, 255, 0.03) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% -20%, rgba(34, 232, 255, 0.12), transparent 60%);
+  background-size:
+    48px 48px,
+    48px 48px,
+    100% 100%;
+}
+
+.VPNavBar {
+  backdrop-filter: blur(8px);
+  background: rgba(6, 8, 14, 0.82) !important;
+}

@@ -115,6 +115,10 @@ TypeScript sources directly under `node --watch` (see `scripts/dev-ts.mjs`). On 
 creates an admin from `MIDDEN_ADMIN_USER` and `MIDDEN_ADMIN_PASSWORD`, or prints a one-time
 password to the log.
 
+The release workflow also publishes a GitHub Pages site from Markdown: a landing page at `/` and
+project docs under `/docs/`. Run `pnpm docs:dev` for local docs preview or `pnpm docs:build` to
+compile the site.
+
 A load check for the sync path, twenty clients at five operations a second each:
 `pnpm --filter @midden/server load`.
 

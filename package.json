@@ -12,6 +12,8 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/**' build",
     "build:standalone": "pnpm --filter @midden/web build:standalone",
+    "docs:dev": "pnpm --filter @midden/website dev",
+    "docs:build": "pnpm --filter @midden/website build",
     "dev": "pnpm -r --parallel --filter './packages/**' dev",
     "lint": "eslint .",
     "format": "prettier --write .",
