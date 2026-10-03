@@ -45,7 +45,7 @@ sign-on, backup and restore, and every environment variable.
 docker run -d --name midden -p 8080:8080 \
   -v "$PWD/midden-data:/data" \
   -e MIDDEN_ADMIN_USER=admin -e MIDDEN_ADMIN_PASSWORD='choose something long' \
-  ghcr.io/jacobstrong/midden:latest
+  ghcr.io/jacstrong/midden:latest
 ```
 
 For the standalone build, download `midden-standalone.html` from a release and open it.

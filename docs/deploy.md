@@ -20,7 +20,7 @@ docker run -d --name midden \
   -e MIDDEN_SECRET="$(openssl rand -base64 32)" \
   -e MIDDEN_ADMIN_USER=admin \
   -e MIDDEN_ADMIN_PASSWORD='choose something long' \
-  ghcr.io/jacobstrong/midden:latest
+  ghcr.io/jacstrong/midden:latest
 ```
 
 Open `http://localhost:8080`, sign in as the admin, and change the password when prompted. If
