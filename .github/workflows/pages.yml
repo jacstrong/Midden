@@ -1,0 +1,64 @@
+name: Pages
+
+# Builds the landing page and docs (website/, reading docs/ in place) and publishes them to
+# GitHub Pages. Pull requests only build, which catches dead links before they merge.
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'website/**', 'pnpm-lock.yaml', '.github/workflows/pages.yml']
+  pull_request:
+    paths: ['docs/**', 'website/**', 'pnpm-lock.yaml', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # "last updated" on each doc page comes from git history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: .pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile --filter @midden/website
+      - id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - name: Build
+        # base_path is /Midden for a project site, or empty once a custom domain is set.
+        run: pnpm --filter @midden/website build
+        env:
+          SITE_BASE: ${{ steps.pages.outputs.base_path }}
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/.vitepress/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

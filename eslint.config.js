@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/test-results/**',
       '**/coverage/**',
       '**/.cache/**',
+      '**/.vitepress/cache/**',
       '**/src/generated/**',
       'release/**',
     ],

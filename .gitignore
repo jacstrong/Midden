@@ -16,3 +16,4 @@ e2e/.auth/
 e2e/.cache/
 release/
 packages/web/src/generated/
+website/.vitepress/cache/

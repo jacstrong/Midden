@@ -21,7 +21,9 @@
     "test:watch": "NODE_OPTIONS=--no-warnings=ExperimentalWarning vitest",
     "e2e": "pnpm --filter @midden/e2e test",
     "check:native": "scripts/check-no-native.sh",
-    "check:nmap": "node --no-warnings=ExperimentalWarning scripts/check-nmap-commands.ts"
+    "check:nmap": "node --no-warnings=ExperimentalWarning scripts/check-nmap-commands.ts",
+    "site:dev": "pnpm --filter @midden/website dev",
+    "site:build": "pnpm --filter @midden/website build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
