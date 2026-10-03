@@ -45,7 +45,7 @@ sign-on, backup and restore, and every environment variable.
 docker run -d --name midden -p 8080:8080 \
   -v "$PWD/midden-data:/data" \
   -e MIDDEN_ADMIN_USER=admin -e MIDDEN_ADMIN_PASSWORD='choose something long' \
-  ghcr.io/jacobstrong/midden:latest
+  ghcr.io/jacstrong/midden:latest
 ```
 
 For the standalone build, download `midden-standalone.html` from a release and open it.
@@ -63,6 +63,8 @@ e2e               Playwright: standalone in three engines, hosted multi-user, pr
                   compatibility.
 scripts           ci-*.sh shared by GitHub Actions and GitLab CI, plus the nmap command check.
 docker            compose file and container entrypoint.
+docs              the guides, as plain Markdown. Also published on the project site.
+website           VitePress landing page and docs site; reads docs/ in place.
 legacy            the original prototypes, kept as parity oracles.
 ```
 
@@ -95,6 +97,7 @@ pnpm build:standalone   # packages/web/dist-standalone/index.html
 pnpm test               # unit tests
 pnpm lint && pnpm typecheck && pnpm format:check
 pnpm check:nmap         # validate generated scan commands against the local nmap
+pnpm site:dev           # landing page + docs on :5173, live-reloading edits to docs/
 ```
 
 End-to-end tests need browsers once:
