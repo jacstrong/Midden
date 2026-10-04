@@ -8,9 +8,11 @@ import {
   MAP_NODE_BUDGET,
   netKey,
   OS_COLORS,
+  traceBranches,
+  traceFanouts,
   type NetAggregate,
-  type ScanHost,
   type TerrainHostSummary,
+  type TerrainTraceHost,
 } from '@midden/core';
 import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore } from '../store/useUiStore';
@@ -18,13 +20,15 @@ import { useTerrain } from '../store/useTerrain';
 import { promoteHosts } from '../lib/terrainActions';
 import { toast } from '../store/useToasts';
 import { EmptyState } from './EmptyState';
-import { useMapMotion, type Box, type Frame, type Point, type View } from './mapMotion';
+import { useMapMotion, type Frame, type Point, type View } from './mapMotion';
 import {
   labelTier,
+  MapBadges,
   MapLabels,
   maxZoom,
   onScreen,
   pxPerUnit,
+  type MapBadge,
   type MapLabel,
   type Size,
 } from './mapLabels';
@@ -47,7 +51,9 @@ export function MapView() {
   const [layout, setLayout] = useState<'subnet' | 'trace'>('subnet');
   const [nets, setNets] = useState<NetAggregate[]>([]);
   const [expanded, setExpanded] = useState<Record<string, TerrainHostSummary[]>>({});
-  const [traceHosts, setTraceHosts] = useState<ScanHost[] | null>(null);
+  const [traceHosts, setTraceHosts] = useState<TerrainTraceHost[] | null>(null);
+  /** Folded trace nodes; null until the analyst changes them, meaning "big fan-outs folded". */
+  const [traceFold, setTraceFold] = useState<ReadonlySet<string> | null>(null);
   const [selected, setSelected] = useState<TerrainHostSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -88,8 +94,8 @@ export function MapView() {
       .traceHosts(scan.id)
       .then((hosts) => {
         if (!alive) return;
-        // layoutTrace wants full ScanHost records; only ip/trace/openCount/bucket matter here
-        setTraceHosts(hosts.map((h) => ({ ...h, ports: [], scripts: [] }) as unknown as ScanHost));
+        setTraceHosts(hosts);
+        setTraceFold(null);
       })
       .catch(() => alive && setTraceHosts([]));
     return () => {
@@ -116,10 +122,23 @@ export function MapView() {
 
   const linked = useMemo(() => caseHostByIp(state), [state]);
   const map = useMemo(() => layoutTerrainMap(nets, expanded), [nets, expanded]);
-  const trace = useMemo(
-    () => (traceHosts && traceHosts.length ? layoutTrace(traceHosts) : null),
-    [traceHosts],
+  const fold = useMemo(
+    () => traceFold ?? (traceHosts ? traceFanouts(traceHosts) : new Set<string>()),
+    [traceFold, traceHosts],
   );
+  const trace = useMemo(
+    () => (traceHosts && traceHosts.length ? layoutTrace(traceHosts, fold) : null),
+    [traceHosts, fold],
+  );
+  const toggleTrace = useCallback(
+    (id: string): void => {
+      const next = new Set(fold);
+      if (!next.delete(id)) next.add(id);
+      setTraceFold(next);
+    },
+    [fold],
+  );
+  const foldedCount = trace ? trace.nodes.filter((n) => n.collapsed).length : 0;
 
   if (!scans.length) {
     return (
@@ -198,11 +217,41 @@ export function MapView() {
             Expand all
           </button>
         )}
+        {layout === 'trace' && trace && (
+          <>
+            <button
+              className="btn ghost"
+              onClick={() => {
+                const n = traceHosts?.length ?? 0;
+                if (n > MAP_NODE_BUDGET) {
+                  toast(
+                    `${n} traced hosts is past the ${MAP_NODE_BUDGET}-node drawing budget — expand routers one at a time`,
+                    'warn',
+                  );
+                  return;
+                }
+                setTraceFold(new Set());
+              }}
+              data-testid="trace-expand-all"
+            >
+              Expand all
+            </button>
+            <button
+              className="btn ghost"
+              onClick={() => setTraceFold(traceBranches(traceHosts ?? []))}
+              data-testid="trace-collapse-all"
+            >
+              Collapse all
+            </button>
+          </>
+        )}
         <span className="sp" />
         <span style={{ color: 'var(--dim)', fontSize: 10, letterSpacing: '.14em' }}>
           {loading
             ? 'LOADING…'
-            : `${nets.length} SUBNETS · ${nets.reduce((n, x) => n + x.hosts, 0)} HOSTS`}
+            : layout === 'trace' && traceHosts
+              ? `${traceHosts.length} TRACED HOSTS${foldedCount ? ` · ${foldedCount} FOLDED` : ''}`
+              : `${nets.length} SUBNETS · ${nets.reduce((n, x) => n + x.hosts, 0)} HOSTS`}
         </span>
       </div>
       <div className="mapwrap">
@@ -216,7 +265,15 @@ export function MapView() {
             selectedIp={selected?.ip ?? null}
           />
         ) : trace ? (
-          <TraceMap trace={trace} hosts={traceHosts ?? []} linked={linked} />
+          <TraceMap
+            trace={trace}
+            hosts={traceHosts ?? []}
+            scope={traceHosts}
+            linked={linked}
+            onToggle={toggleTrace}
+            onSelect={setSelected}
+            selectedIp={selected?.ip ?? null}
+          />
         ) : (
           <EmptyState
             title="No traceroute data"
@@ -624,34 +681,62 @@ const TRACE_LABEL_PX = [22, 36] as const;
 function TraceMap({
   trace,
   hosts,
+  scope,
   linked,
+  onToggle,
+  onSelect,
+  selectedIp,
 }: {
   trace: TraceLayout;
-  hosts: ScanHost[];
+  hosts: TerrainTraceHost[];
+  /** The loaded trace data; a new one means a different tree, which jumps instead of moving. */
+  scope: unknown;
   linked: Map<string, string>;
+  onToggle: (id: string) => void;
+  onSelect: (h: TerrainHostSummary | null) => void;
+  selectedIp: string | null;
 }) {
-  const { ref, view, size, transform, reset, handlers } = usePanZoom();
-  const bounds = useMemo((): Box => {
+  const { ref, view, size, transform, reset, getView, handlers } = usePanZoom();
+  const target = useMemo((): Frame => {
     const xs = trace.nodes.map((n) => n.x);
     const ys = trace.nodes.map((n) => n.y);
     const pad = 120;
     const x = Math.min(...xs) - pad;
     const y = Math.min(...ys) - pad;
-    return { x, y, w: Math.max(...xs) - x + pad, h: Math.max(...ys) - y + pad };
-  }, [trace]);
+    // extra room on the right for the folded-count pills
+    const bounds = { x, y, w: Math.max(...xs) - x + pad + 60, h: Math.max(...ys) - y + pad };
+    return { pos: new Map(trace.nodes.map((n) => [n.id, { x: n.x, y: n.y }])), bounds, scope };
+  }, [trace, scope]);
+  const parentOf = useMemo(() => new Map(trace.edges.map((e) => [e.b, e.a])), [trace]);
+  const frame = useMapMotion(target, parentOf, { getView, onRefit: reset });
+  const { bounds } = frame;
   const ppu = size.w ? pxPerUnit(bounds, size, view) : 0;
   const tier = labelTier(TRACE_ROW * ppu, TRACE_LABEL_PX);
-  const labels: MapLabel[] =
-    tier === 0
-      ? []
-      : trace.nodes.map((n) => ({
-          id: n.id,
-          x: n.x,
-          y: n.y,
-          r: n.r + (n.host >= 0 && linked.has(hosts[n.host]?.ip ?? '') ? 5.5 : 1),
-          name: n.label,
-          detail: tier === 2 ? n.sub || undefined : undefined,
-        }));
+  const labels: MapLabel[] = [];
+  const badges: MapBadge[] = [];
+  for (const n of trace.nodes) {
+    const p = frame.pos.get(n.id) ?? n;
+    const ip = n.host >= 0 ? hosts[n.host]?.ip : undefined;
+    const ring = selectedIp && ip === selectedIp ? 8.5 : ip && linked.has(ip) ? 5.5 : 1;
+    if (tier > 0)
+      labels.push({
+        id: n.id,
+        x: p.x,
+        y: p.y,
+        r: n.r + (n.collapsed ? STACK_OFFSET * 2 : 0) + ring,
+        name: n.label,
+        detail: tier === 2 ? n.sub || undefined : undefined,
+      });
+    if (n.collapsed && tier > 0)
+      badges.push({
+        id: n.id,
+        x: p.x,
+        y: p.y,
+        r: n.r + STACK_OFFSET * 2,
+        text: `+${n.below ?? 0} host${n.below === 1 ? '' : 's'}`,
+      });
+  }
+  const visible = onScreen(bounds, size, view);
   return (
     <>
       <button className="btn ghost mapreset" onClick={reset}>
@@ -667,35 +752,68 @@ function TraceMap({
         data-label-tier={tier}
       >
         <g transform={transform}>
-          <TraceScene trace={trace} hosts={hosts} linked={linked} />
-          <MapLabels labels={labels} ppu={ppu} view={onScreen(bounds, size, view)} />
+          <TraceScene
+            trace={trace}
+            frame={frame}
+            hosts={hosts}
+            linked={linked}
+            onToggle={onToggle}
+            onSelect={onSelect}
+            selectedIp={selectedIp}
+          />
+          <MapLabels labels={labels} ppu={ppu} view={visible} />
+          <MapBadges badges={badges} ppu={ppu} view={visible} />
         </g>
       </svg>
     </>
   );
 }
 
+/** How far each disc of a folded node's stack sits from the one in front, in map units. */
+const STACK_OFFSET = 4;
+
+function traceTitle(n: TraceLayout['nodes'][number], isHost: boolean): string {
+  const head = `${n.label}${n.sub ? `  ${n.sub}` : ''}`;
+  const hosts = `${n.below ?? 0} host${n.below === 1 ? '' : 's'}`;
+  const inspect = isHost ? ' · opens the inspector' : '';
+  if (!n.kids) return isHost ? `${head}\nclick to inspect` : head;
+  return n.collapsed
+    ? `${head}\n${hosts} folded below\nclick to expand${inspect}`
+    : `${head}\n${hosts} below\nclick to collapse${inspect}`;
+}
+
 /** The traceroute map's shapes. Memoised so that panning and zooming only redraw the labels. */
 const TraceScene = memo(function TraceScene({
   trace,
+  frame,
   hosts,
   linked,
+  onToggle,
+  onSelect,
+  selectedIp,
 }: {
   trace: TraceLayout;
-  hosts: ScanHost[];
+  frame: Frame;
+  hosts: TerrainTraceHost[];
   linked: Map<string, string>;
+  onToggle: (id: string) => void;
+  onSelect: (h: TerrainHostSummary | null) => void;
+  selectedIp: string | null;
 }) {
   const state = useCaseStore((s) => s.state);
+  const at = (id: string, fallback: Point): Point => frame.pos.get(id) ?? fallback;
   const byId2 = new Map(trace.nodes.map((n) => [n.id, n]));
   return (
     <>
-      {trace.edges.map((e, i) => {
-        const a = byId2.get(e.a);
-        const b = byId2.get(e.b);
-        if (!a || !b) return null;
+      {trace.edges.map((e) => {
+        const na = byId2.get(e.a);
+        const nb = byId2.get(e.b);
+        if (!na || !nb) return null;
+        const a = at(e.a, na);
+        const b = at(e.b, nb);
         return (
           <line
-            key={i}
+            key={`${e.a}>${e.b}`}
             x1={a.x}
             y1={a.y}
             x2={b.x}
@@ -706,16 +824,72 @@ const TraceScene = memo(function TraceScene({
         );
       })}
       {trace.nodes.map((n) => {
-        const ip = n.host >= 0 ? hosts[n.host]?.ip : undefined;
-        const id = ip ? linked.get(ip) : undefined;
+        const p = at(n.id, n);
+        const host = n.host >= 0 ? hosts[n.host] : undefined;
+        const id = host ? linked.get(host.ip) : undefined;
         const status = id ? (HS[state.hosts[id]?.status ?? 'unknown'] ?? HS.unknown).color : null;
+        const kids = n.kids ?? 0;
+        const arm = n.r * 0.5;
+        const glyph = {
+          stroke: '#0b1017',
+          strokeWidth: Math.max(2, n.r * 0.17),
+          strokeLinecap: 'round' as const,
+        };
         return (
-          <g key={n.id} className="mapnode">
-            <title>{`${n.label}${n.sub ? `  ${n.sub}` : ''}`}</title>
-            {status && (
-              <circle cx={n.x} cy={n.y} r={n.r + 4} fill="none" stroke={status} strokeWidth={2.5} />
+          <g
+            key={n.id}
+            className={kids ? 'mapnode branch' : 'mapnode'}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (kids && n.kind !== 'root') onToggle(n.id);
+              if (host) onSelect(host);
+            }}
+            data-testid="trace-node"
+            data-kind={n.kind}
+            data-kids={kids}
+            data-collapsed={n.collapsed ? 'true' : 'false'}
+          >
+            <title>{traceTitle(n, !!host)}</title>
+            {n.collapsed &&
+              [2, 1].map((d) => (
+                <circle
+                  key={d}
+                  cx={p.x + STACK_OFFSET * d}
+                  cy={p.y - STACK_OFFSET * d}
+                  r={n.r}
+                  fill={n.color}
+                  fillOpacity={0.45}
+                  stroke="#0b1017"
+                  strokeWidth={1.5}
+                />
+              ))}
+            {selectedIp && host?.ip === selectedIp && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={n.r + 7}
+                fill="none"
+                stroke="#22e8ff"
+                strokeWidth={1.5}
+              />
             )}
-            <circle cx={n.x} cy={n.y} r={n.r} fill={n.color} stroke="#0b1017" strokeWidth={1.5} />
+            {status && (
+              <circle cx={p.x} cy={p.y} r={n.r + 4} fill="none" stroke={status} strokeWidth={2.5} />
+            )}
+            <circle cx={p.x} cy={p.y} r={n.r} fill={n.color} stroke="#0b1017" strokeWidth={1.5} />
+            {n.collapsed ? (
+              <g pointerEvents="none" {...glyph} data-testid="fold-plus">
+                <line x1={p.x - arm} y1={p.y} x2={p.x + arm} y2={p.y} />
+                <line x1={p.x} y1={p.y - arm} x2={p.x} y2={p.y + arm} />
+              </g>
+            ) : (
+              kids > 0 &&
+              n.kind !== 'root' && (
+                <g pointerEvents="none" className="foldhint" {...glyph}>
+                  <line x1={p.x - arm} y1={p.y} x2={p.x + arm} y2={p.y} />
+                </g>
+              )
+            )}
           </g>
         );
       })}

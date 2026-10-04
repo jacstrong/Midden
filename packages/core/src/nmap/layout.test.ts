@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { layoutBounds, layoutSubnet, layoutTrace, nodeRadius, summarize } from './layout.js';
+import {
+  layoutBounds,
+  layoutSubnet,
+  layoutTrace,
+  nodeRadius,
+  summarize,
+  traceBranches,
+  traceFanouts,
+  TRACE_FANOUT_LIMIT,
+} from './layout.js';
 import { classify } from './classify.js';
 import { newScanHost, newScanPort, type ScanHost } from './types.js';
 
@@ -108,6 +117,62 @@ describe('layoutTrace', () => {
     expect(l.edges).toContainEqual({ a: 'r:10.0.1.254', b: 'h:1', kind: 'link' });
     const bounds = layoutBounds(l.nodes);
     expect(bounds.w).toBeGreaterThan(750);
+  });
+});
+
+describe('collapsing the trace', () => {
+  const hop = (ttl: number, ip: string) => ({ ttl, ip, host: '', rtt: String(ttl) });
+  // scanner -> 10.0.0.1 (scanned gateway) -> router 10.0.1.254 -> n hosts; plus one host on the gateway
+  const scan = (n: number): ScanHost[] => [
+    mk('10.0.0.1', [], { trace: [hop(1, '10.0.0.1')] }),
+    mk('10.0.0.9', [], { trace: [hop(1, '10.0.0.1'), hop(2, '10.0.0.9')] }),
+    ...Array.from({ length: n }, (_, i) =>
+      mk(`10.0.1.${i + 1}`, [], {
+        trace: [hop(1, '10.0.0.1'), hop(2, '10.0.1.254'), hop(3, `10.0.1.${i + 1}`)],
+      }),
+    ),
+  ];
+
+  it('counts children and the scanned hosts below every node', () => {
+    const l = layoutTrace(scan(3))!;
+    const byId = Object.fromEntries(l.nodes.map((n) => [n.id, n]));
+    expect(byId['h:0']).toMatchObject({ kids: 2, below: 4, collapsed: false });
+    expect(byId['r:10.0.1.254']).toMatchObject({ kids: 3, below: 3, collapsed: false });
+    expect(byId['h:2']).toMatchObject({ kids: 0, below: 0, collapsed: false });
+    expect(byId['root']).toMatchObject({ below: 5, collapsed: false });
+  });
+
+  it('folds a subtree into its node and closes up the rows', () => {
+    const full = layoutTrace(scan(3))!;
+    const folded = layoutTrace(scan(3), new Set(['r:10.0.1.254']))!;
+    expect(full.nodes).toHaveLength(7);
+    expect(folded.nodes.map((n) => n.id).sort()).toEqual(['h:0', 'h:1', 'r:10.0.1.254', 'root']);
+    expect(folded.nodes.find((n) => n.id === 'r:10.0.1.254')).toMatchObject({
+      collapsed: true,
+      kids: 3,
+      below: 3,
+    });
+    // no edge leads to a node that is not drawn
+    const ids = new Set(folded.nodes.map((n) => n.id));
+    for (const e of folded.edges) expect(ids.has(e.a) && ids.has(e.b)).toBe(true);
+    const span = (l: typeof full) =>
+      Math.max(...l.nodes.map((n) => n.y)) - Math.min(...l.nodes.map((n) => n.y));
+    expect(span(folded)).toBeLessThan(span(full));
+  });
+
+  it('draws the same tree as before when nothing is collapsed, and never folds the root', () => {
+    expect(layoutTrace(scan(3), new Set())).toEqual(layoutTrace(scan(3)));
+    expect(layoutTrace(scan(3), new Set(['root']))).toEqual(layoutTrace(scan(3)));
+    // a leaf in the set has nothing to fold
+    const l = layoutTrace(scan(3), new Set(['h:2']))!;
+    expect(l.nodes.find((n) => n.id === 'h:2')!.collapsed).toBe(false);
+  });
+
+  it('starts large fan-outs folded and can list every branch', () => {
+    expect(traceFanouts(scan(TRACE_FANOUT_LIMIT))).toEqual(new Set());
+    expect(traceFanouts(scan(TRACE_FANOUT_LIMIT + 1))).toEqual(new Set(['r:10.0.1.254']));
+    expect(traceBranches(scan(3))).toEqual(new Set(['h:0', 'r:10.0.1.254']));
+    expect(traceFanouts([mk('10.0.0.1')])).toEqual(new Set());
   });
 });
 

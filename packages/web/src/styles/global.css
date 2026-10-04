@@ -1518,6 +1518,14 @@ kbd {
 .mapnode:hover circle {
   stroke: #eaf6ff;
 }
+/* An expanded trace node with children shows a minus on hover: clicking folds it. */
+.mapnode .foldhint {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.mapnode:hover .foldhint {
+  opacity: 1;
+}
 .mapreset {
   position: absolute;
   top: 10px;

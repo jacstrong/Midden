@@ -96,3 +96,64 @@ export function MapLabels({ labels, ppu, view }: { labels: MapLabel[]; ppu: numb
     </g>
   );
 }
+
+export interface MapBadge {
+  id: string;
+  x: number;
+  y: number;
+  /** Radius to clear, in map units; the pill sits just to the right of it. */
+  r: number;
+  text: string;
+}
+
+const BADGE_PX = 10;
+/** Rough advance of one character at BADGE_PX, enough to size the pill around its text. */
+const BADGE_CHAR_PX = 6.4;
+
+/** Count pills beside nodes in `badges` that are on screen, at a constant screen size. */
+export function MapBadges({ badges, ppu, view }: { badges: MapBadge[]; ppu: number; view: Box }) {
+  if (!badges.length || !(ppu > 0)) return null;
+  const u = 1 / ppu;
+  const h = (BADGE_PX + 6) * u;
+  const margin = 120 * u;
+  return (
+    <g pointerEvents="none" data-testid="map-badges">
+      {badges
+        .filter(
+          (b) =>
+            b.x >= view.x - margin &&
+            b.x <= view.x + view.w + margin &&
+            b.y >= view.y - margin &&
+            b.y <= view.y + view.h + margin,
+        )
+        .map((b) => {
+          const x = b.x + b.r + 5 * u;
+          const w = (b.text.length * BADGE_CHAR_PX + 12) * u;
+          return (
+            <g key={b.id} data-testid="map-badge">
+              <rect
+                x={x}
+                y={b.y - h / 2}
+                width={w}
+                height={h}
+                rx={h / 2}
+                fill="#16324a"
+                stroke="#22e8ff"
+                strokeOpacity={0.55}
+                strokeWidth={u}
+              />
+              <text
+                x={x + w / 2}
+                y={b.y + BADGE_PX * 0.36 * u}
+                textAnchor="middle"
+                fontSize={BADGE_PX * u}
+                fill="#cfeef6"
+              >
+                {b.text}
+              </text>
+            </g>
+          );
+        })}
+    </g>
+  );
+}
