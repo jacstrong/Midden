@@ -151,6 +151,9 @@ export function layoutSubnet(hosts: ScanHost[], bits = 24): Layout {
 /** What the trace layout reads from each host, so callers can pass summaries as well as full hosts. */
 export type TraceHostInput = Pick<ScanHost, 'ip' | 'trace' | 'openCount' | 'bucket' | 'hostnames'>;
 
+/** Vertical distance between rows of the traceroute tree. */
+export const TRACE_ROW = 76;
+
 /** Routers (or hosts) with more children than this start collapsed. */
 export const TRACE_FANOUT_LIMIT = 60;
 
@@ -277,7 +280,7 @@ export function layoutTrace(
       id: 'root',
       kind: 'root',
       x: 0,
-      y: (slot.get('root') ?? 0) * 62,
+      y: (slot.get('root') ?? 0) * TRACE_ROW,
       r: 24,
       label: 'scanner',
       sub: 'hop 0',
@@ -291,7 +294,7 @@ export function layoutTrace(
   for (const nid of children.keys()) {
     if (nid === 'root' || !depthOf.has(nid)) continue;
     const d = depthOf.get(nid) ?? 1;
-    const y = (slot.get(nid) ?? 0) * 62;
+    const y = (slot.get(nid) ?? 0) * TRACE_ROW;
     const x = d * 250;
     if (nid.startsWith('h:')) {
       const idx = Number(nid.slice(2));

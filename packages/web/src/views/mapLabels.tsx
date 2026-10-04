@@ -15,7 +15,12 @@ export interface Size {
 const MAX_PX_PER_UNIT = 4;
 const NAME_PX = 11;
 const DETAIL_PX = 10;
-const GAP_PX = 3;
+/** Between the node's edge and the top of its label. */
+const GAP_PX = 2;
+/** Extra leading between the name and the detail line. */
+const LEADING_PX = 1;
+/** The halo drawn around label text, half of which falls outside the glyphs. */
+const HALO_PX = 3;
 
 /** Screen pixels per map unit at the base fit (preserveAspectRatio="xMidYMid meet"). */
 function fitScale(vb: Box, size: Size): number {
@@ -38,6 +43,16 @@ export function onScreen(vb: Box, size: Size, v: View): Box {
 /** Highest zoom: the usual 9x, or more when the map is so large that 9x would leave hosts unreadable. */
 export function maxZoom(vb: Box, size: Size): number {
   return Math.max(9, MAX_PX_PER_UNIT / fitScale(vb, size));
+}
+
+/**
+ * Screen height a label takes below its node: the gap, the name, the detail line if any, the
+ * descenders and the halo. Spacing thresholds are built from this so a label never reaches the
+ * next node down.
+ */
+export function labelHeightPx(lines: 1 | 2): number {
+  const last = lines === 2 ? DETAIL_PX : NAME_PX;
+  return GAP_PX + NAME_PX + (lines === 2 ? LEADING_PX + DETAIL_PX : 0) + 0.25 * last + HALO_PX / 2;
 }
 
 /** 0 = no label, 1 = short label, 2 = full label; from how far apart nodes sit on screen. */
@@ -86,7 +101,12 @@ export function MapLabels({ labels, ppu, view }: { labels: MapLabel[]; ppu: numb
           >
             {l.name}
             {l.detail && (
-              <tspan x={l.x} dy={(GAP_PX + DETAIL_PX) * u} fontSize={DETAIL_PX * u} fill="#8593a5">
+              <tspan
+                x={l.x}
+                dy={(LEADING_PX + DETAIL_PX) * u}
+                fontSize={DETAIL_PX * u}
+                fill="#8593a5"
+              >
                 {l.detail}
               </tspan>
             )}

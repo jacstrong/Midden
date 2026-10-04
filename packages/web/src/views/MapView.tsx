@@ -8,6 +8,7 @@ import {
   MAP_NODE_BUDGET,
   netKey,
   OS_COLORS,
+  TRACE_ROW,
   traceBranches,
   traceFanouts,
   type NetAggregate,
@@ -22,6 +23,7 @@ import { toast } from '../store/useToasts';
 import { EmptyState } from './EmptyState';
 import { useMapMotion, type Frame, type Point, type View } from './mapMotion';
 import {
+  labelHeightPx,
   labelTier,
   MapBadges,
   MapLabels,
@@ -673,10 +675,12 @@ const SubnetScene = memo(function SubnetScene({
 
 type TraceLayout = NonNullable<ReturnType<typeof layoutTrace>>;
 
-/** Rows of the traceroute tree are this far apart. */
-const TRACE_ROW = 62;
-/** Screen gap between rows for a node's address, then for its hostname or hop as well. */
-const TRACE_LABEL_PX = [22, 36] as const;
+/**
+ * Room a label may use between rows, in map units: the row spacing less the largest node above
+ * and below it, and an allowance for status and selection rings and a folded node's stack.
+ */
+const TRACE_RING_ROOM = 12;
+const TRACE_LABEL_PX = [labelHeightPx(1), labelHeightPx(2)] as const;
 
 function TraceMap({
   trace,
@@ -711,19 +715,21 @@ function TraceMap({
   const frame = useMapMotion(target, parentOf, { getView, onRefit: reset });
   const { bounds } = frame;
   const ppu = size.w ? pxPerUnit(bounds, size, view) : 0;
-  const tier = labelTier(TRACE_ROW * ppu, TRACE_LABEL_PX);
+  const maxR = useMemo(() => Math.max(...trace.nodes.map((n) => n.r)), [trace]);
+  const tier = labelTier((TRACE_ROW - 2 * maxR - TRACE_RING_ROOM) * ppu, TRACE_LABEL_PX);
   const labels: MapLabel[] = [];
   const badges: MapBadge[] = [];
   for (const n of trace.nodes) {
     const p = frame.pos.get(n.id) ?? n;
     const ip = n.host >= 0 ? hosts[n.host]?.ip : undefined;
-    const ring = selectedIp && ip === selectedIp ? 8.5 : ip && linked.has(ip) ? 5.5 : 1;
+    const ring = selectedIp && ip === selectedIp ? 8.5 : ip && linked.has(ip) ? 5.5 : 0.75;
     if (tier > 0)
       labels.push({
         id: n.id,
         x: p.x,
         y: p.y,
-        r: n.r + (n.collapsed ? STACK_OFFSET * 2 : 0) + ring,
+        // a folded node's stack rises up and right, so it never pushes the label down
+        r: n.r + ring,
         name: n.label,
         detail: tier === 2 ? n.sub || undefined : undefined,
       });
