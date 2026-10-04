@@ -78,7 +78,10 @@ export function blend(
   };
 }
 
-function reducedMotion(): boolean {
+/** No tween when the user asked for less motion, or when nobody can see it: a hidden page gets
+ * no animation frames, so the nodes would sit half-way until the tab came back. */
+function skipMotion(): boolean {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return true;
   return (
     typeof window !== 'undefined' &&
     !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -108,7 +111,7 @@ export function useMapMotion(
       bounds: visibleBox(painted.current.bounds, getView()),
     };
     onRefit();
-    if (from.scope !== target.scope || reducedMotion() || target.pos.size > MOTION_NODE_LIMIT) {
+    if (from.scope !== target.scope || skipMotion() || target.pos.size > MOTION_NODE_LIMIT) {
       painted.current = target;
       setFrame(target);
       return;

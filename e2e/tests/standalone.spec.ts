@@ -202,6 +202,21 @@ test.describe('standalone single-file build', () => {
     await page.getByTestId('map-host').first().click();
     await expect(page.getByTestId('map-inspector')).toBeVisible();
 
+    // zoomed right out the hosts are too close to label; zooming in on one brings back its
+    // address, then its hostname as well
+    const map = page.getByTestId('terrain-map');
+    await map.hover();
+    for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 200);
+    await expect(map).toHaveAttribute('data-label-tier', '0');
+    await expect(page.getByTestId('map-label').filter({ hasText: /^10\.20\./ })).toHaveCount(0);
+    const dc = page.getByTestId('map-host').filter({ hasText: '10.20.1.5' });
+    for (let i = 0; i < 40 && (await map.getAttribute('data-label-tier')) !== '2'; i++) {
+      await dc.hover({ force: true });
+      await page.mouse.wheel(0, -200);
+    }
+    await expect(map).toHaveAttribute('data-label-tier', '2');
+    await expect(page.getByTestId('map-label').filter({ hasText: /^10\.20\.1\.5/ })).toBeVisible();
+
     // the scan travels in the saved case file
     const [download] = await Promise.all([
       page.waitForEvent('download'),

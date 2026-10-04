@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   byId,
   caseHostByIp,
@@ -18,7 +18,16 @@ import { useTerrain } from '../store/useTerrain';
 import { promoteHosts } from '../lib/terrainActions';
 import { toast } from '../store/useToasts';
 import { EmptyState } from './EmptyState';
-import { useMapMotion, type Frame, type Point, type View } from './mapMotion';
+import { useMapMotion, type Box, type Frame, type Point, type View } from './mapMotion';
+import {
+  labelTier,
+  MapLabels,
+  maxZoom,
+  onScreen,
+  pxPerUnit,
+  type MapLabel,
+  type Size,
+} from './mapLabels';
 
 const HS = byId(HOST_STATUS);
 
@@ -282,9 +291,11 @@ export function MapView() {
   );
 }
 
-/** Pan and zoom around a static SVG scene. */
+/** Pan and zoom around a static SVG scene, plus the screen size the scene is drawn at. */
 function usePanZoom(): {
   ref: React.RefObject<SVGSVGElement | null>;
+  view: View;
+  size: Size;
   transform: string;
   reset: () => void;
   /** The pan and zoom as of the last commit, for code that runs between renders. */
@@ -293,13 +304,29 @@ function usePanZoom(): {
 } {
   const ref = useRef<SVGSVGElement>(null);
   const [t, setT] = useState<View>({ k: 1, x: 0, y: 0 });
+  const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const view = useRef(t);
   useLayoutEffect(() => {
     view.current = t;
   }, [t]);
+  useLayoutEffect(() => {
+    const svg = ref.current;
+    if (!svg) return;
+    const measure = (): void => {
+      const r = svg.getBoundingClientRect();
+      setSize((s) => (s.w === r.width && s.h === r.height ? s : { w: r.width, h: r.height }));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(svg);
+    return () => ro.disconnect();
+  }, []);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   return {
     ref,
+    view: t,
+    size,
     transform: `translate(${t.x},${t.y}) scale(${t.k})`,
     reset: () => setT({ k: 1, x: 0, y: 0 }),
     getView: () => view.current,
@@ -307,12 +334,16 @@ function usePanZoom(): {
       onWheel: (e) => {
         const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
         setT((cur) => {
-          const k = Math.min(9, Math.max(0.15, cur.k * f));
-          const scale = k / cur.k;
           const svg = ref.current;
-          if (!svg) return { ...cur, k };
+          if (!svg) return { ...cur, k: Math.min(9, Math.max(0.15, cur.k * f)) };
           const rect = svg.getBoundingClientRect();
           const vb = svg.viewBox.baseVal;
+          const limit = maxZoom(
+            { x: vb.x, y: vb.y, w: vb.width, h: vb.height },
+            { w: rect.width, h: rect.height },
+          );
+          const k = Math.min(limit, Math.max(0.15, cur.k * f));
+          const scale = k / cur.k;
           const s = Math.max(vb.width / rect.width, vb.height / rect.height);
           const mx = (e.clientX - rect.left - rect.width / 2) * s + vb.x + vb.width / 2;
           const my = (e.clientY - rect.top - rect.height / 2) * s + vb.y + vb.height / 2;
@@ -358,6 +389,17 @@ function frameOf(map: TerrainMap, scope: unknown): Frame {
   return { pos, bounds: map.bounds, scope };
 }
 
+/** Closest the layout puts hosts on a ring, which decides when their labels fit. */
+const HOST_SPACING = 70;
+/** Screen gap between hosts for an octet label, then for the full IP and hostname. */
+const HOST_LABEL_PX = [40, 90] as const;
+/** A subnet label needs about this much screen room to its nearest neighbour hub. */
+const HUB_LABEL_PX = 100;
+
+const lastOctet = (ip: string): string =>
+  ip.includes('.') ? '.' + (ip.split('.').pop() ?? '') : ':' + (ip.split(':').pop() ?? '');
+const shortName = (hostnames: string[]): string | undefined => hostnames[0]?.split('.')[0];
+
 function SubnetMap({
   map,
   scope,
@@ -374,12 +416,97 @@ function SubnetMap({
   onSelect: (h: TerrainHostSummary | null) => void;
   selectedIp: string | null;
 }) {
-  const state = useCaseStore((s) => s.state);
-  const { ref, transform, reset, getView, handlers } = usePanZoom();
+  const { ref, view, size, transform, reset, getView, handlers } = usePanZoom();
   const target = useMemo(() => frameOf(map, scope), [map, scope]);
   const parentOf = useMemo(() => new Map(map.edges.map((e) => [e.b, e.a])), [map]);
   const frame = useMapMotion(target, parentOf, { getView, onRefit: reset });
   const { bounds } = frame;
+
+  // Room around each hub: the distance to its nearest neighbour hub.
+  const hubRoom = useMemo(() => {
+    const room = new Map<string, number>();
+    for (const a of map.hubs) {
+      let d = Infinity;
+      for (const b of map.hubs) if (a !== b) d = Math.min(d, Math.hypot(a.x - b.x, a.y - b.y));
+      room.set(a.id, d);
+    }
+    return room;
+  }, [map]);
+
+  const ppu = size.w ? pxPerUnit(bounds, size, view) : 0;
+  const tier = labelTier(HOST_SPACING * ppu, HOST_LABEL_PX);
+  const labels: MapLabel[] = [];
+  for (const h of map.hubs) {
+    if ((hubRoom.get(h.id) ?? 0) * ppu < HUB_LABEL_PX) continue;
+    const p = frame.pos.get(h.id) ?? h;
+    labels.push({
+      id: h.id,
+      x: p.x,
+      y: p.y,
+      r: h.r + 2,
+      name: h.netKey,
+      detail: `${h.hosts} hosts`,
+    });
+  }
+  if (tier > 0)
+    for (const h of map.hosts) {
+      const p = frame.pos.get(h.id) ?? h;
+      // Clear the outermost ring drawn around the host, which grows with the zoom.
+      const r = h.r + (selectedIp === h.ip ? 8.5 : linked.has(h.ip) ? 5.5 : h.flagged ? 3 : 1);
+      labels.push(
+        tier === 2
+          ? { id: h.id, x: p.x, y: p.y, r, name: h.ip, detail: shortName(h.host.hostnames) }
+          : { id: h.id, x: p.x, y: p.y, r, name: lastOctet(h.ip) },
+      );
+    }
+
+  return (
+    <>
+      <button className="btn ghost mapreset" onClick={reset} data-testid="map-reset">
+        Reset view
+      </button>
+      <svg
+        ref={ref}
+        className="terrainsvg"
+        viewBox={`${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`}
+        preserveAspectRatio="xMidYMid meet"
+        {...handlers}
+        data-testid="terrain-map"
+        data-label-tier={tier}
+      >
+        <g transform={transform}>
+          <SubnetScene
+            map={map}
+            frame={frame}
+            linked={linked}
+            onToggle={onToggle}
+            onSelect={onSelect}
+            selectedIp={selectedIp}
+          />
+          <MapLabels labels={labels} ppu={ppu} view={onScreen(bounds, size, view)} />
+        </g>
+      </svg>
+    </>
+  );
+}
+
+/** The subnet map's shapes. Memoised so that panning and zooming only redraw the labels. */
+const SubnetScene = memo(function SubnetScene({
+  map,
+  frame,
+  linked,
+  onToggle,
+  onSelect,
+  selectedIp,
+}: {
+  map: TerrainMap;
+  frame: Frame;
+  linked: Map<string, string>;
+  onToggle: (netKey: string) => void;
+  onSelect: (h: TerrainHostSummary | null) => void;
+  selectedIp: string | null;
+}) {
+  const state = useCaseStore((s) => s.state);
   const at = (id: string, fallback: Point): Point => frame.pos.get(id) ?? fallback;
   const statusOf = (ip: string): string | null => {
     const id = linked.get(ip);
@@ -394,149 +521,137 @@ function SubnetMap({
   };
   return (
     <>
-      <button className="btn ghost mapreset" onClick={reset} data-testid="map-reset">
-        Reset view
-      </button>
-      <svg
-        ref={ref}
-        className="terrainsvg"
-        viewBox={`${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`}
-        preserveAspectRatio="xMidYMid meet"
-        {...handlers}
-        data-testid="terrain-map"
-      >
-        <g transform={transform}>
-          {map.edges.map((e) => {
-            const a = at(e.a, { x: e.x1, y: e.y1 });
-            const b = at(e.b, { x: e.x2, y: e.y2 });
-            return (
-              <line
-                key={`${e.a}>${e.b}`}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={e.trunk ? '#33465c' : '#243244'}
-                strokeWidth={e.trunk ? 1.8 : 1}
-              />
-            );
-          })}
-          {map.root && (
+      {map.edges.map((e) => {
+        const a = at(e.a, { x: e.x1, y: e.y1 });
+        const b = at(e.b, { x: e.x2, y: e.y2 });
+        return (
+          <line
+            key={`${e.a}>${e.b}`}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke={e.trunk ? '#33465c' : '#243244'}
+            strokeWidth={e.trunk ? 1.8 : 1}
+          />
+        );
+      })}
+      {map.root && (
+        <circle
+          cx={at('root', map.root).x}
+          cy={at('root', map.root).y}
+          r={map.root.r}
+          fill="#e6edf6"
+          stroke="#0b1017"
+          strokeWidth={1.5}
+        />
+      )}
+      {map.hubs.map((h) => {
+        const overlay = hubOverlay(h.netKey);
+        const p = at(h.id, h);
+        return (
+          <g
+            key={h.id}
+            className="mapnode"
+            onClick={() => onToggle(h.netKey)}
+            data-testid="map-hub"
+          >
+            <title>{`${h.netKey}\n${h.hosts} hosts · ${h.openPorts} open ports${h.flagged ? ` · ${h.flagged} flagged` : ''}${overlay ? `\n${overlay} in this case` : ''}\nclick to ${h.expanded ? 'collapse' : 'expand'}`}</title>
             <circle
-              cx={at('root', map.root).x}
-              cy={at('root', map.root).y}
-              r={map.root.r}
-              fill="#e6edf6"
-              stroke="#0b1017"
-              strokeWidth={1.5}
+              cx={p.x}
+              cy={p.y}
+              r={h.r}
+              fill={h.expanded ? '#16324a' : '#9fb0c4'}
+              stroke={overlay ? '#ff1f3d' : '#0b1017'}
+              strokeWidth={overlay ? 2.5 : 1.5}
             />
-          )}
-          {map.hubs.map((h) => {
-            const overlay = hubOverlay(h.netKey);
-            const p = at(h.id, h);
-            return (
-              <g
-                key={h.id}
-                className="mapnode"
-                onClick={() => onToggle(h.netKey)}
-                data-testid="map-hub"
-              >
-                <title>{`${h.netKey}\n${h.hosts} hosts · ${h.openPorts} open ports${h.flagged ? ` · ${h.flagged} flagged` : ''}${overlay ? `\n${overlay} in this case` : ''}\nclick to ${h.expanded ? 'collapse' : 'expand'}`}</title>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={h.r}
-                  fill={h.expanded ? '#16324a' : '#9fb0c4'}
-                  stroke={overlay ? '#ff1f3d' : '#0b1017'}
-                  strokeWidth={overlay ? 2.5 : 1.5}
-                />
-                <text x={p.x} y={p.y + h.r + 16} textAnchor="middle" fill="#cfdae8" fontSize={12}>
-                  {h.netKey}
-                </text>
-                <text x={p.x} y={p.y + h.r + 28} textAnchor="middle" fill="#8593a5" fontSize={10}>
-                  {h.hosts} hosts
-                </text>
-              </g>
-            );
-          })}
-          {map.hosts.map((h) => {
-            const status = statusOf(h.ip);
-            const p = at(h.id, h);
-            return (
-              <g
-                key={h.id}
-                className="mapnode"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect(h.host);
-                }}
-                data-testid="map-host"
-              >
-                <title>{`${h.ip}${h.host.hostnames[0] ? `  ${h.host.hostnames[0]}` : ''}\n${h.host.bucket}${h.host.role ? ` | ${h.host.role}` : ''}\n${h.host.openCount} open ports`}</title>
-                {selectedIp === h.ip && (
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={h.r + 7}
-                    fill="none"
-                    stroke="#22e8ff"
-                    strokeWidth={1.5}
-                  />
-                )}
-                {status && (
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={h.r + 4}
-                    fill="none"
-                    stroke={status}
-                    strokeWidth={2.5}
-                  />
-                )}
-                {h.flagged && (
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={h.r + 2}
-                    fill="none"
-                    stroke="#ffb03a"
-                    strokeWidth={1.4}
-                    strokeDasharray="3 3"
-                  />
-                )}
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={h.r}
-                  fill={h.color}
-                  stroke="#0b1017"
-                  strokeWidth={1.5}
-                />
-              </g>
-            );
-          })}
-        </g>
-      </svg>
+          </g>
+        );
+      })}
+      {map.hosts.map((h) => {
+        const status = statusOf(h.ip);
+        const p = at(h.id, h);
+        return (
+          <g
+            key={h.id}
+            className="mapnode"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(h.host);
+            }}
+            data-testid="map-host"
+          >
+            <title>{`${h.ip}${h.host.hostnames[0] ? `  ${h.host.hostnames[0]}` : ''}\n${h.host.bucket}${h.host.role ? ` | ${h.host.role}` : ''}\n${h.host.openCount} open ports`}</title>
+            {selectedIp === h.ip && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={h.r + 7}
+                fill="none"
+                stroke="#22e8ff"
+                strokeWidth={1.5}
+              />
+            )}
+            {status && (
+              <circle cx={p.x} cy={p.y} r={h.r + 4} fill="none" stroke={status} strokeWidth={2.5} />
+            )}
+            {h.flagged && (
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={h.r + 2}
+                fill="none"
+                stroke="#ffb03a"
+                strokeWidth={1.4}
+                strokeDasharray="3 3"
+              />
+            )}
+            <circle cx={p.x} cy={p.y} r={h.r} fill={h.color} stroke="#0b1017" strokeWidth={1.5} />
+          </g>
+        );
+      })}
     </>
   );
-}
+});
+
+type TraceLayout = NonNullable<ReturnType<typeof layoutTrace>>;
+
+/** Rows of the traceroute tree are this far apart. */
+const TRACE_ROW = 62;
+/** Screen gap between rows for a node's address, then for its hostname or hop as well. */
+const TRACE_LABEL_PX = [22, 36] as const;
 
 function TraceMap({
   trace,
   hosts,
   linked,
 }: {
-  trace: NonNullable<ReturnType<typeof layoutTrace>>;
+  trace: TraceLayout;
   hosts: ScanHost[];
   linked: Map<string, string>;
 }) {
-  const state = useCaseStore((s) => s.state);
-  const { ref, transform, reset, handlers } = usePanZoom();
-  const xs = trace.nodes.map((n) => n.x);
-  const ys = trace.nodes.map((n) => n.y);
-  const pad = 120;
-  const vb = `${Math.min(...xs) - pad} ${Math.min(...ys) - pad} ${Math.max(...xs) - Math.min(...xs) + 2 * pad} ${Math.max(...ys) - Math.min(...ys) + 2 * pad}`;
-  const byId2 = new Map(trace.nodes.map((n) => [n.id, n]));
+  const { ref, view, size, transform, reset, handlers } = usePanZoom();
+  const bounds = useMemo((): Box => {
+    const xs = trace.nodes.map((n) => n.x);
+    const ys = trace.nodes.map((n) => n.y);
+    const pad = 120;
+    const x = Math.min(...xs) - pad;
+    const y = Math.min(...ys) - pad;
+    return { x, y, w: Math.max(...xs) - x + pad, h: Math.max(...ys) - y + pad };
+  }, [trace]);
+  const ppu = size.w ? pxPerUnit(bounds, size, view) : 0;
+  const tier = labelTier(TRACE_ROW * ppu, TRACE_LABEL_PX);
+  const labels: MapLabel[] =
+    tier === 0
+      ? []
+      : trace.nodes.map((n) => ({
+          id: n.id,
+          x: n.x,
+          y: n.y,
+          r: n.r + (n.host >= 0 && linked.has(hosts[n.host]?.ip ?? '') ? 5.5 : 1),
+          name: n.label,
+          detail: tier === 2 ? n.sub || undefined : undefined,
+        }));
   return (
     <>
       <button className="btn ghost mapreset" onClick={reset}>
@@ -545,66 +660,68 @@ function TraceMap({
       <svg
         ref={ref}
         className="terrainsvg"
-        viewBox={vb}
+        viewBox={`${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`}
         preserveAspectRatio="xMidYMid meet"
         {...handlers}
         data-testid="terrain-trace"
+        data-label-tier={tier}
       >
         <g transform={transform}>
-          {trace.edges.map((e, i) => {
-            const a = byId2.get(e.a);
-            const b = byId2.get(e.b);
-            if (!a || !b) return null;
-            return (
-              <line
-                key={i}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke={e.kind === 'trunk' ? '#33465c' : '#243244'}
-                strokeWidth={e.kind === 'trunk' ? 1.8 : 1}
-              />
-            );
-          })}
-          {trace.nodes.map((n) => {
-            const ip = n.host >= 0 ? hosts[n.host]?.ip : undefined;
-            const id = ip ? linked.get(ip) : undefined;
-            const status = id
-              ? (HS[state.hosts[id]?.status ?? 'unknown'] ?? HS.unknown).color
-              : null;
-            return (
-              <g key={n.id} className="mapnode">
-                <title>{`${n.label}${n.sub ? `  ${n.sub}` : ''}`}</title>
-                {status && (
-                  <circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={n.r + 4}
-                    fill="none"
-                    stroke={status}
-                    strokeWidth={2.5}
-                  />
-                )}
-                <circle
-                  cx={n.x}
-                  cy={n.y}
-                  r={n.r}
-                  fill={n.color}
-                  stroke="#0b1017"
-                  strokeWidth={1.5}
-                />
-                <text x={n.x} y={n.y + n.r + 15} textAnchor="middle" fill="#cfdae8" fontSize={11}>
-                  {n.label}
-                </text>
-              </g>
-            );
-          })}
+          <TraceScene trace={trace} hosts={hosts} linked={linked} />
+          <MapLabels labels={labels} ppu={ppu} view={onScreen(bounds, size, view)} />
         </g>
       </svg>
     </>
   );
 }
+
+/** The traceroute map's shapes. Memoised so that panning and zooming only redraw the labels. */
+const TraceScene = memo(function TraceScene({
+  trace,
+  hosts,
+  linked,
+}: {
+  trace: TraceLayout;
+  hosts: ScanHost[];
+  linked: Map<string, string>;
+}) {
+  const state = useCaseStore((s) => s.state);
+  const byId2 = new Map(trace.nodes.map((n) => [n.id, n]));
+  return (
+    <>
+      {trace.edges.map((e, i) => {
+        const a = byId2.get(e.a);
+        const b = byId2.get(e.b);
+        if (!a || !b) return null;
+        return (
+          <line
+            key={i}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke={e.kind === 'trunk' ? '#33465c' : '#243244'}
+            strokeWidth={e.kind === 'trunk' ? 1.8 : 1}
+          />
+        );
+      })}
+      {trace.nodes.map((n) => {
+        const ip = n.host >= 0 ? hosts[n.host]?.ip : undefined;
+        const id = ip ? linked.get(ip) : undefined;
+        const status = id ? (HS[state.hosts[id]?.status ?? 'unknown'] ?? HS.unknown).color : null;
+        return (
+          <g key={n.id} className="mapnode">
+            <title>{`${n.label}${n.sub ? `  ${n.sub}` : ''}`}</title>
+            {status && (
+              <circle cx={n.x} cy={n.y} r={n.r + 4} fill="none" stroke={status} strokeWidth={2.5} />
+            )}
+            <circle cx={n.x} cy={n.y} r={n.r} fill={n.color} stroke="#0b1017" strokeWidth={1.5} />
+          </g>
+        );
+      })}
+    </>
+  );
+});
 
 function Legend() {
   return (
