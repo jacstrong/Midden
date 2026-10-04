@@ -680,7 +680,12 @@ type TraceLayout = NonNullable<ReturnType<typeof layoutTrace>>;
  * and below it, and an allowance for status and selection rings and a folded node's stack.
  */
 const TRACE_RING_ROOM = 12;
-const TRACE_LABEL_PX = [labelHeightPx(1), labelHeightPx(2)] as const;
+/** Clear space a label keeps above the next node down, so rows never look cramped. */
+const TRACE_LABEL_BREATH_PX = 6;
+const TRACE_LABEL_PX = [
+  labelHeightPx(1) + TRACE_LABEL_BREATH_PX,
+  labelHeightPx(2) + TRACE_LABEL_BREATH_PX,
+] as const;
 
 function TraceMap({
   trace,
@@ -715,7 +720,11 @@ function TraceMap({
   const frame = useMapMotion(target, parentOf, { getView, onRefit: reset });
   const { bounds } = frame;
   const ppu = size.w ? pxPerUnit(bounds, size, view) : 0;
-  const maxR = useMemo(() => Math.max(...trace.nodes.map((n) => n.r)), [trace]);
+  // The scanner sits alone in the first column, so only the other nodes ever share a column.
+  const maxR = useMemo(
+    () => Math.max(0, ...trace.nodes.filter((n) => n.kind !== 'root').map((n) => n.r)),
+    [trace],
+  );
   const tier = labelTier((TRACE_ROW - 2 * maxR - TRACE_RING_ROOM) * ppu, TRACE_LABEL_PX);
   const labels: MapLabel[] = [];
   const badges: MapBadge[] = [];
