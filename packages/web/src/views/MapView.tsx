@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   byId,
   caseHostByIp,
@@ -18,6 +18,7 @@ import { useTerrain } from '../store/useTerrain';
 import { promoteHosts } from '../lib/terrainActions';
 import { toast } from '../store/useToasts';
 import { EmptyState } from './EmptyState';
+import { useMapMotion, type Frame, type Point, type View } from './mapMotion';
 
 const HS = byId(HOST_STATUS);
 
@@ -199,6 +200,7 @@ export function MapView() {
         {layout === 'subnet' ? (
           <SubnetMap
             map={map}
+            scope={nets}
             linked={linked}
             onToggle={(k) => void toggleNet(k)}
             onSelect={setSelected}
@@ -285,15 +287,22 @@ function usePanZoom(): {
   ref: React.RefObject<SVGSVGElement | null>;
   transform: string;
   reset: () => void;
+  /** The pan and zoom as of the last commit, for code that runs between renders. */
+  getView: () => View;
   handlers: React.SVGProps<SVGSVGElement>;
 } {
   const ref = useRef<SVGSVGElement>(null);
-  const [t, setT] = useState({ k: 1, x: 0, y: 0 });
+  const [t, setT] = useState<View>({ k: 1, x: 0, y: 0 });
+  const view = useRef(t);
+  useLayoutEffect(() => {
+    view.current = t;
+  }, [t]);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   return {
     ref,
     transform: `translate(${t.x},${t.y}) scale(${t.k})`,
     reset: () => setT({ k: 1, x: 0, y: 0 }),
+    getView: () => view.current,
     handlers: {
       onWheel: (e) => {
         const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
@@ -338,22 +347,40 @@ function usePanZoom(): {
   };
 }
 
+type TerrainMap = ReturnType<typeof layoutTerrainMap>;
+
+/** Where the layout puts every node, as a frame the map can move towards. */
+function frameOf(map: TerrainMap, scope: unknown): Frame {
+  const pos = new Map<string, Point>();
+  if (map.root) pos.set('root', map.root);
+  for (const n of map.hubs) pos.set(n.id, n);
+  for (const n of map.hosts) pos.set(n.id, n);
+  return { pos, bounds: map.bounds, scope };
+}
+
 function SubnetMap({
   map,
+  scope,
   linked,
   onToggle,
   onSelect,
   selectedIp,
 }: {
-  map: ReturnType<typeof layoutTerrainMap>;
+  map: TerrainMap;
+  /** The loaded subnet data; a new one means a different map, which jumps instead of moving. */
+  scope: unknown;
   linked: Map<string, string>;
   onToggle: (netKey: string) => void;
   onSelect: (h: TerrainHostSummary | null) => void;
   selectedIp: string | null;
 }) {
   const state = useCaseStore((s) => s.state);
-  const { ref, transform, reset, handlers } = usePanZoom();
-  const { bounds } = map;
+  const { ref, transform, reset, getView, handlers } = usePanZoom();
+  const target = useMemo(() => frameOf(map, scope), [map, scope]);
+  const parentOf = useMemo(() => new Map(map.edges.map((e) => [e.b, e.a])), [map]);
+  const frame = useMapMotion(target, parentOf, { getView, onRefit: reset });
+  const { bounds } = frame;
+  const at = (id: string, fallback: Point): Point => frame.pos.get(id) ?? fallback;
   const statusOf = (ip: string): string | null => {
     const id = linked.get(ip);
     const h = id ? state.hosts[id] : undefined;
@@ -379,21 +406,25 @@ function SubnetMap({
         data-testid="terrain-map"
       >
         <g transform={transform}>
-          {map.edges.map((e, i) => (
-            <line
-              key={i}
-              x1={e.x1}
-              y1={e.y1}
-              x2={e.x2}
-              y2={e.y2}
-              stroke={e.trunk ? '#33465c' : '#243244'}
-              strokeWidth={e.trunk ? 1.8 : 1}
-            />
-          ))}
+          {map.edges.map((e) => {
+            const a = at(e.a, { x: e.x1, y: e.y1 });
+            const b = at(e.b, { x: e.x2, y: e.y2 });
+            return (
+              <line
+                key={`${e.a}>${e.b}`}
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={e.trunk ? '#33465c' : '#243244'}
+                strokeWidth={e.trunk ? 1.8 : 1}
+              />
+            );
+          })}
           {map.root && (
             <circle
-              cx={map.root.x}
-              cy={map.root.y}
+              cx={at('root', map.root).x}
+              cy={at('root', map.root).y}
               r={map.root.r}
               fill="#e6edf6"
               stroke="#0b1017"
@@ -402,6 +433,7 @@ function SubnetMap({
           )}
           {map.hubs.map((h) => {
             const overlay = hubOverlay(h.netKey);
+            const p = at(h.id, h);
             return (
               <g
                 key={h.id}
@@ -411,17 +443,17 @@ function SubnetMap({
               >
                 <title>{`${h.netKey}\n${h.hosts} hosts · ${h.openPorts} open ports${h.flagged ? ` · ${h.flagged} flagged` : ''}${overlay ? `\n${overlay} in this case` : ''}\nclick to ${h.expanded ? 'collapse' : 'expand'}`}</title>
                 <circle
-                  cx={h.x}
-                  cy={h.y}
+                  cx={p.x}
+                  cy={p.y}
                   r={h.r}
                   fill={h.expanded ? '#16324a' : '#9fb0c4'}
                   stroke={overlay ? '#ff1f3d' : '#0b1017'}
                   strokeWidth={overlay ? 2.5 : 1.5}
                 />
-                <text x={h.x} y={h.y + h.r + 16} textAnchor="middle" fill="#cfdae8" fontSize={12}>
+                <text x={p.x} y={p.y + h.r + 16} textAnchor="middle" fill="#cfdae8" fontSize={12}>
                   {h.netKey}
                 </text>
-                <text x={h.x} y={h.y + h.r + 28} textAnchor="middle" fill="#8593a5" fontSize={10}>
+                <text x={p.x} y={p.y + h.r + 28} textAnchor="middle" fill="#8593a5" fontSize={10}>
                   {h.hosts} hosts
                 </text>
               </g>
@@ -429,6 +461,7 @@ function SubnetMap({
           })}
           {map.hosts.map((h) => {
             const status = statusOf(h.ip);
+            const p = at(h.id, h);
             return (
               <g
                 key={h.id}
@@ -442,8 +475,8 @@ function SubnetMap({
                 <title>{`${h.ip}${h.host.hostnames[0] ? `  ${h.host.hostnames[0]}` : ''}\n${h.host.bucket}${h.host.role ? ` | ${h.host.role}` : ''}\n${h.host.openCount} open ports`}</title>
                 {selectedIp === h.ip && (
                   <circle
-                    cx={h.x}
-                    cy={h.y}
+                    cx={p.x}
+                    cy={p.y}
                     r={h.r + 7}
                     fill="none"
                     stroke="#22e8ff"
@@ -452,8 +485,8 @@ function SubnetMap({
                 )}
                 {status && (
                   <circle
-                    cx={h.x}
-                    cy={h.y}
+                    cx={p.x}
+                    cy={p.y}
                     r={h.r + 4}
                     fill="none"
                     stroke={status}
@@ -462,8 +495,8 @@ function SubnetMap({
                 )}
                 {h.flagged && (
                   <circle
-                    cx={h.x}
-                    cy={h.y}
+                    cx={p.x}
+                    cy={p.y}
                     r={h.r + 2}
                     fill="none"
                     stroke="#ffb03a"
@@ -472,8 +505,8 @@ function SubnetMap({
                   />
                 )}
                 <circle
-                  cx={h.x}
-                  cy={h.y}
+                  cx={p.x}
+                  cy={p.y}
                   r={h.r}
                   fill={h.color}
                   stroke="#0b1017"
