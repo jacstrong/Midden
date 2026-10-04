@@ -16,6 +16,12 @@ export interface MapNode {
   color: string;
   /** Index into the hosts array, or -1 for synthetic nodes. */
   host: number;
+  /** Trace layout only: direct children in the full tree, whether or not they are drawn. */
+  kids?: number;
+  /** Trace layout only: scanned hosts anywhere below this node. */
+  below?: number;
+  /** Trace layout only: this node's subtree is folded away. */
+  collapsed?: boolean;
 }
 
 export interface MapEdge {
@@ -36,7 +42,7 @@ export function nodeRadius(h: Pick<ScanHost, 'openCount'>): number {
 function hostLabel(h: ScanHost): string {
   return h.ip.includes('.') ? '.' + (h.ip.split('.').pop() ?? '') : h.ip;
 }
-function hostSub(h: ScanHost): string {
+function hostSub(h: Pick<ScanHost, 'hostnames'>): string {
   return h.hostnames[0] ? (h.hostnames[0].split('.')[0] ?? '') : '';
 }
 
@@ -142,9 +148,23 @@ export function layoutSubnet(hosts: ScanHost[], bits = 24): Layout {
   return { nodes, edges };
 }
 
-/** Real topology from --traceroute hop data. Depth = column. Returns null when no host has a trace. */
-export function layoutTrace(hosts: ScanHost[]): Layout | null {
-  if (!hosts.some((h) => h.trace.length)) return null;
+/** What the trace layout reads from each host, so callers can pass summaries as well as full hosts. */
+export type TraceHostInput = Pick<ScanHost, 'ip' | 'trace' | 'openCount' | 'bucket' | 'hostnames'>;
+
+/** Vertical distance between rows of the traceroute tree. */
+export const TRACE_ROW = 76;
+
+/** Routers (or hosts) with more children than this start collapsed. */
+export const TRACE_FANOUT_LIMIT = 60;
+
+interface TraceTree {
+  parent: Map<string, string>;
+  children: Map<string, string[]>;
+  label: Map<string, string>;
+}
+
+/** The hop tree: scanner at 'root', scanned hosts as `h:<index>`, unknown hops as `r:<ip>`. */
+function traceTree(hosts: TraceHostInput[]): TraceTree {
   const byIp = new Map<string, number>();
   hosts.forEach((h, i) => byIp.set(h.ip, i));
 
@@ -186,18 +206,60 @@ export function layoutTrace(hosts: ScanHost[]): Layout | null {
       attach(nid, 'root');
     }
   });
+  return { parent, children, label };
+}
+
+/** Nodes that fan out to more than `limit` children: the ones a large trace opens with folded. */
+export function traceFanouts(hosts: TraceHostInput[], limit = TRACE_FANOUT_LIMIT): Set<string> {
+  const out = new Set<string>();
+  if (!hosts.some((h) => h.trace.length)) return out;
+  for (const [nid, kids] of traceTree(hosts).children)
+    if (nid !== 'root' && kids.length > limit) out.add(nid);
+  return out;
+}
+
+/** Every node with children, i.e. everything "collapse all" can fold. */
+export function traceBranches(hosts: TraceHostInput[]): Set<string> {
+  return traceFanouts(hosts, 0);
+}
+
+/**
+ * Real topology from --traceroute hop data. Depth = column. Nodes in `collapsed` are drawn as
+ * leaves and their subtrees are left out, so the rows close up. Returns null when no host has
+ * a trace.
+ */
+export function layoutTrace(
+  hosts: TraceHostInput[],
+  collapsed: ReadonlySet<string> = new Set(),
+): Layout | null {
+  if (!hosts.some((h) => h.trace.length)) return null;
+  const { parent, children, label } = traceTree(hosts);
+
+  // Scanned hosts below each node, over the full tree.
+  const below = new Map<string, number>();
+  const count = (nid: string): number => {
+    let n = 0;
+    for (const k of children.get(nid) ?? []) n += count(k) + (k.startsWith('h:') ? 1 : 0);
+    below.set(nid, n);
+    return n;
+  };
+  count('root');
+
+  // Only what is drawn: nothing below a collapsed node (the root never folds).
+  const shown = (nid: string): string[] =>
+    nid !== 'root' && collapsed.has(nid) ? [] : (children.get(nid) ?? []);
 
   const depthOf = new Map<string, number>();
   const walk = (nid: string, depth: number): void => {
     depthOf.set(nid, depth);
-    for (const k of children.get(nid) ?? []) walk(k, depth + 1);
+    for (const k of shown(nid)) walk(k, depth + 1);
   };
   walk('root', 0);
 
   const slot = new Map<string, number>();
   let row = 0;
   const assign = (nid: string): number => {
-    const kids = children.get(nid) ?? [];
+    const kids = shown(nid);
     if (!kids.length) {
       slot.set(nid, row);
       return row++;
@@ -209,24 +271,30 @@ export function layoutTrace(hosts: ScanHost[]): Layout | null {
   };
   assign('root');
 
+  const tree = (nid: string): Pick<MapNode, 'kids' | 'below' | 'collapsed'> => {
+    const kids = children.get(nid)?.length ?? 0;
+    return { kids, below: below.get(nid) ?? 0, collapsed: kids > 0 && collapsed.has(nid) };
+  };
   const nodes: MapNode[] = [
     {
       id: 'root',
       kind: 'root',
       x: 0,
-      y: (slot.get('root') ?? 0) * 62,
+      y: (slot.get('root') ?? 0) * TRACE_ROW,
       r: 24,
       label: 'scanner',
       sub: 'hop 0',
       color: '#e6edf6',
       host: -1,
+      ...tree('root'),
+      collapsed: false,
     },
   ];
   const edges: MapEdge[] = [];
   for (const nid of children.keys()) {
-    if (nid === 'root') continue;
+    if (nid === 'root' || !depthOf.has(nid)) continue;
     const d = depthOf.get(nid) ?? 1;
-    const y = (slot.get(nid) ?? 0) * 62;
+    const y = (slot.get(nid) ?? 0) * TRACE_ROW;
     const x = d * 250;
     if (nid.startsWith('h:')) {
       const idx = Number(nid.slice(2));
@@ -241,6 +309,7 @@ export function layoutTrace(hosts: ScanHost[]): Layout | null {
         sub: hostSub(h),
         color: OS_COLOR_MAP[h.bucket] ?? '#7b8797',
         host: idx,
+        ...tree(nid),
       });
     } else {
       nodes.push({
@@ -253,11 +322,13 @@ export function layoutTrace(hosts: ScanHost[]): Layout | null {
         sub: `hop ${d}`,
         color: '#9fb0c4',
         host: -1,
+        ...tree(nid),
       });
     }
   }
   for (const [nid, par] of parent)
-    edges.push({ a: par, b: nid, kind: nid.startsWith('h:') ? 'link' : 'trunk' });
+    if (depthOf.has(nid))
+      edges.push({ a: par, b: nid, kind: nid.startsWith('h:') ? 'link' : 'trunk' });
   return { nodes, edges };
 }
 

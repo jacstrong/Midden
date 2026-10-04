@@ -202,6 +202,42 @@ test.describe('standalone single-file build', () => {
     await page.getByTestId('map-host').first().click();
     await expect(page.getByTestId('map-inspector')).toBeVisible();
 
+    // zoomed right out the hosts are too close to label; zooming in on one brings back its
+    // address, then its hostname as well
+    const map = page.getByTestId('terrain-map');
+    await map.hover();
+    for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 200);
+    await expect(map).toHaveAttribute('data-label-tier', '0');
+    await expect(page.getByTestId('map-label').filter({ hasText: /^10\.20\./ })).toHaveCount(0);
+    const dc = page.getByTestId('map-host').filter({ hasText: '10.20.1.5' });
+    for (let i = 0; i < 40 && (await map.getAttribute('data-label-tier')) !== '2'; i++) {
+      await dc.hover({ force: true });
+      await page.mouse.wheel(0, -200);
+    }
+    await expect(map).toHaveAttribute('data-label-tier', '2');
+    await expect(page.getByTestId('map-label').filter({ hasText: /^10\.20\.1\.5/ })).toBeVisible();
+
+    // the traceroute tree folds a router into a marked node and unfolds it again
+    await page.getByTestId('layout-trace').click();
+    const nodes = page.getByTestId('trace-node');
+    await expect(nodes).toHaveCount(5);
+    const gw = nodes.filter({ hasText: '10.20.0.1' });
+    await gw.click();
+    await expect(nodes).toHaveCount(2);
+    await expect(gw).toHaveAttribute('data-collapsed', 'true');
+    await expect(gw.getByTestId('fold-plus')).toHaveCount(1);
+    await expect(page.getByTestId('map-badge')).toHaveText('+2 hosts');
+    await gw.click();
+    await expect(nodes).toHaveCount(5);
+    await expect(page.getByTestId('map-badge')).toHaveCount(0);
+    // a host in the tree opens the inspector, and collapse all folds back to the first hop
+    await nodes.filter({ hasText: '10.20.4.31' }).click();
+    await expect(page.getByTestId('map-inspector')).toContainText('10.20.4.31');
+    await page.getByTestId('trace-collapse-all').click();
+    await expect(nodes).toHaveCount(2);
+    await page.getByTestId('trace-expand-all').click();
+    await expect(nodes).toHaveCount(5);
+
     // the scan travels in the saved case file
     const [download] = await Promise.all([
       page.waitForEvent('download'),
