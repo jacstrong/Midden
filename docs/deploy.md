@@ -181,7 +181,7 @@ MIDDEN_DATA=./data MIDDEN_PUBLIC_DIR=packages/web/dist \
 
 ## No server at all
 
-Every release also ships `midden-standalone.html`: the same interface in one file, with no
+Every release also ships `midden-standalone-<version>.html`: the same interface in one file, with no
 server, no storage and no network calls. Open it from disk, work on a case, save a `.json`,
 and reopen it later. It reads nmap scans too, parsing them in the page. Use it when you are
 working alone or cannot run a container; use the server when more than one person needs the

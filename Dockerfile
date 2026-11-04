@@ -18,7 +18,8 @@ RUN pnpm --filter @midden/core build \
  && pnpm --filter @midden/server build \
  && pnpm --filter @midden/web build \
  && pnpm --filter @midden/server deploy --legacy --prod --ignore-scripts /out/server \
- && sh scripts/check-no-native.sh /out/server/node_modules
+ && sh scripts/check-no-native.sh /out/server/node_modules \
+ && node scripts/gen-sbom.mjs --check --deployed /out/server
 
 FROM node:24.22-alpine AS runtime
 ENV NODE_ENV=production \

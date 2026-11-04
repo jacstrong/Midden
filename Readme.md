@@ -48,7 +48,7 @@ docker run -d --name midden -p 8080:8080 \
   ghcr.io/jacstrong/midden:latest
 ```
 
-For the standalone build, download `midden-standalone.html` from a release and open it.
+For the standalone build, download `midden-standalone-<version>.html` from a release and open it.
 
 ## Layout
 
