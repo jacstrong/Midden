@@ -30,6 +30,14 @@ export interface Touch {
   actor: Actor;
 }
 
+/** An actor as `appendOp` takes it: `via` names the API token, when one made the change. */
+export interface OpActor extends Actor {
+  via?: string | undefined;
+}
+
+export const actorName = (displayName: string, via: string | null | undefined): string =>
+  via ? `${displayName} via ${via}` : displayName;
+
 export type AppendResult =
   | { ok: true; seq: number; broadcast: Broadcast; overwrote: Overwrite[]; duplicate: boolean }
   | { ok: false; code: RejectCode; message: string };
@@ -59,10 +67,12 @@ export class CaseRuntime {
 
   /** Rebuild the per-field last-writer map from the full log (thousands of ops: milliseconds). */
   private rebuildTouches(): void {
-    const rows = this.db.all<{ seq: number; actor_id: string; payload: string }>(
-      'SELECT seq, actor_id, payload FROM ops WHERE case_id = ? ORDER BY seq',
-      this.caseId,
-    );
+    const rows = this.db.all<{
+      seq: number;
+      actor_id: string;
+      via: string | null;
+      payload: string;
+    }>('SELECT seq, actor_id, via, payload FROM ops WHERE case_id = ? ORDER BY seq', this.caseId);
     const names = new Map<string, string>();
     for (const r of this.db.all<{ id: string; display_name: string }>(
       'SELECT id, display_name FROM users',
@@ -70,7 +80,7 @@ export class CaseRuntime {
       names.set(r.id, r.display_name);
     for (const r of rows) {
       const op = JSON.parse(r.payload) as Op;
-      const actor = { id: r.actor_id, name: names.get(r.actor_id) ?? r.actor_id };
+      const actor = { id: r.actor_id, name: actorName(names.get(r.actor_id) ?? r.actor_id, r.via) };
       for (const f of touchedFields(op)) this.lastTouch.set(f, { seq: Number(r.seq), actor });
     }
   }
@@ -92,7 +102,7 @@ export class CaseRuntime {
   }
 
   appendOp(
-    actor: Actor,
+    { via, ...actor }: OpActor,
     rawOp: unknown,
     opts: { clientOpId?: string | undefined; baseSeq?: number | undefined; canEdit: boolean },
   ): AppendResult {
@@ -150,10 +160,11 @@ export class CaseRuntime {
       );
       const s = Number(row?.seq);
       this.db.run(
-        'INSERT INTO ops (case_id, seq, actor_id, ts, client_op_id, base_seq, type, payload, inverse) VALUES (?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO ops (case_id, seq, actor_id, via, ts, client_op_id, base_seq, type, payload, inverse) VALUES (?,?,?,?,?,?,?,?,?,?)',
         this.caseId,
         s,
         actor.id,
+        via ?? null,
         ts,
         opts.clientOpId ?? null,
         opts.baseSeq ?? null,
@@ -189,11 +200,12 @@ export class CaseRuntime {
     const rows = this.db.all<{
       seq: number;
       actor_id: string;
+      via: string | null;
       ts: string;
       client_op_id: string | null;
       payload: string;
     }>(
-      'SELECT o.seq, o.actor_id, o.ts, o.client_op_id, o.payload FROM ops o WHERE o.case_id = ? AND o.seq > ? ORDER BY o.seq LIMIT ?',
+      'SELECT o.seq, o.actor_id, o.via, o.ts, o.client_op_id, o.payload FROM ops o WHERE o.case_id = ? AND o.seq > ? ORDER BY o.seq LIMIT ?',
       this.caseId,
       afterSeq,
       limit,
@@ -206,7 +218,7 @@ export class CaseRuntime {
     return rows.map((r) => ({
       seq: Number(r.seq),
       op: JSON.parse(r.payload) as Op,
-      actor: { id: r.actor_id, name: names.get(r.actor_id) ?? r.actor_id },
+      actor: { id: r.actor_id, name: actorName(names.get(r.actor_id) ?? r.actor_id, r.via) },
       ts: r.ts,
       clientOpId: r.client_op_id ?? undefined,
     }));

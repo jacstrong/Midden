@@ -87,6 +87,26 @@ test.describe('hosted collaboration', () => {
     await expect(page.getByTestId('user-row')).toHaveCount(5);
   });
 
+  test('an analyst creates an API token, uses it, and revokes it', async ({ page, request }) => {
+    await signIn(page, 'ann', 'ann-password-123');
+    await page.getByTestId('nav-tokens').click();
+    await page.locator('#ntName').fill('e2e-agent');
+    await page.locator('#ntScope').selectOption('write');
+    await expect(page.getByTestId('write-warning')).toBeVisible();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const token = await page.getByTestId('fresh-token').locator('code').innerText();
+    expect(token).toMatch(/^mdn_/);
+
+    const headers = { authorization: `Bearer ${token}` };
+    expect((await request.get('/api/cases', { headers })).status()).toBe(200);
+    expect((await request.get('/api/users', { headers })).status()).toBe(403);
+
+    const row = page.getByTestId('token-row').filter({ hasText: 'e2e-agent' });
+    await row.getByRole('button', { name: 'Revoke' }).click();
+    await expect(row).toHaveCount(0);
+    expect((await request.get('/api/cases', { headers })).status()).toBe(401);
+  });
+
   test('two analysts edit one case live, see each other, get conflict notices, and revert from history', async ({
     browser,
   }) => {

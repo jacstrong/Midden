@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AttachmentMeta, Op } from '@midden/core';
 import { accessOrThrow } from '../cases/routes.js';
+import { actorOf } from '../app.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { TooLargeError } from '../blobs/store.js';
@@ -160,11 +161,9 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       meta.uploadedByName,
       meta.note,
     );
-    const r = rt.appendOp(
-      { id: user.id, name: user.displayName },
-      { type: 'attachment.add', att: meta } satisfies Op,
-      { canEdit: access.edit },
-    );
+    const r = rt.appendOp(actorOf(req), { type: 'attachment.add', att: meta } satisfies Op, {
+      canEdit: access.edit,
+    });
     if (!r.ok) {
       app.db.run('DELETE FROM attachments WHERE id = ?', meta.id);
       await app.blobs.release(meta.sha256);
@@ -204,7 +203,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; attId: string } }>(
     '/api/cases/:id/attachments/:attId',
     async (req) => {
-      const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
+      const { access } = accessOrThrow(app, req, req.params.id, 'edit');
       const row = app.db.get<AttachmentRow>(
         'SELECT * FROM attachments WHERE id = ? AND case_id = ? AND deleted_at IS NULL',
         req.params.attId,
@@ -213,7 +212,7 @@ export async function attachmentRoutes(app: FastifyInstance): Promise<void> {
       if (!row) throw notFound('No such attachment');
       const rt = app.runtimes.get(req.params.id);
       const r = rt.appendOp(
-        { id: user.id, name: user.displayName },
+        actorOf(req),
         { type: 'attachment.remove', id: row.id },
         { canEdit: access.edit },
       );

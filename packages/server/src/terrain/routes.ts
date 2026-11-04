@@ -23,6 +23,7 @@ import {
   type ScriptOutput,
 } from '@midden/core';
 import { accessOrThrow } from '../cases/routes.js';
+import { actorOf } from '../app.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { TooLargeError } from '../blobs/store.js';
@@ -276,7 +277,7 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
       'parsing',
     );
     const rt = app.runtimes.get(caseId);
-    const actor = { id: user.id, name: user.displayName };
+    const actor = actorOf(req);
     const added = rt.appendOp(actor, { type: 'scan.add', scan: meta } satisfies Op, {
       canEdit: access.edit,
     });
@@ -498,11 +499,11 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; scanId: string } }>(
     '/api/cases/:id/scans/:scanId',
     async (req) => {
-      const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
+      const { access } = accessOrThrow(app, req, req.params.id, 'edit');
       const s = loadScan(app, req.params.id, req.params.scanId);
       const rt = app.runtimes.get(req.params.id);
       const r = rt.appendOp(
-        { id: user.id, name: user.displayName },
+        actorOf(req),
         { type: 'scan.remove', id: s.id },
         { canEdit: access.edit },
       );

@@ -31,6 +31,7 @@ import { api, type CaseAccess } from './lib/api';
 import { LoginPage } from './pages/LoginPage';
 import { CasesPage } from './pages/CasesPage';
 import { UsersPage } from './pages/UsersPage';
+import { TokensPage } from './pages/TokensPage';
 import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { toast } from './store/useToasts';
 
@@ -79,6 +80,8 @@ function HostedApp() {
   switch (route.kind) {
     case 'users':
       return <UsersPage />;
+    case 'tokens':
+      return <TokensPage />;
     case 'case':
       return <HostedCase caseId={route.caseId} history={route.view === 'history'} />;
     default:

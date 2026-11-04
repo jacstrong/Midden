@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { requireAdmin, requireUser } from '../app.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { hashPassword, verifyPassword } from './password.js';
+import { revokeUserTokens } from './tokens.js';
 import {
   clearLoginFailures,
   createSession,
@@ -178,7 +179,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       app.db.run('UPDATE users SET role = ? WHERE id = ?', body.role, target.id);
     if (body.disabled !== undefined) {
       app.db.run('UPDATE users SET disabled = ? WHERE id = ?', body.disabled ? 1 : 0, target.id);
-      if (body.disabled) destroyUserSessions(app.db, target.id);
+      if (body.disabled) {
+        destroyUserSessions(app.db, target.id);
+        revokeUserTokens(app.db, target.id);
+      }
     }
     if (body.password !== undefined) {
       app.db.run(
@@ -186,7 +190,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         hashPassword(body.password, argon),
         target.id,
       );
+      // An admin resetting a password is usually dealing with a compromised account.
       destroyUserSessions(app.db, target.id);
+      revokeUserTokens(app.db, target.id);
     }
     return { user: publicUser(findUserById(app.db, target.id)!) };
   });
