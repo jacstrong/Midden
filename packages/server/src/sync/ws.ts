@@ -19,7 +19,7 @@ import type { CaseRuntime } from '../cases/runtime.js';
 
 const presenceByCase = new Map<string, Map<string, PresenceEntry>>();
 
-function originOk(app: FastifyInstance, req: FastifyRequest): boolean {
+export function originOk(app: FastifyInstance, req: FastifyRequest): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser clients (tests, CLI)
   if (app.cfg.publicOrigin) return origin === app.cfg.publicOrigin;

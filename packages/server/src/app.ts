@@ -25,6 +25,7 @@ import { oidcRoutes } from './auth/oidc.js';
 import { caseRoutes } from './cases/routes.js';
 import { wsRoutes } from './sync/ws.js';
 import { adminRoutes } from './admin/routes.js';
+import { mcpRoutes } from './mcp/routes.js';
 import { openApiDocument } from './openapi/spec.js';
 import type { Config } from './config.js';
 
@@ -114,6 +115,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   // ambient the way a cookie is, so a request carrying a valid one cannot be forged this way.
   app.addHook('onRequest', async (req) => {
     if (!req.url.startsWith('/api/') || req.token) return;
+    if (req.routeOptions.url === '/api/mcp') return; // refuses anything but a token by itself
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
     if (req.headers.upgrade) return;
     if (req.headers['x-midden-client'] === undefined)
@@ -174,6 +176,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.register(adminRoutes);
   app.register(terrainRoutes);
   app.register(attachmentRoutes);
+  app.register(mcpRoutes);
 
   registerStatic(app, version);
 

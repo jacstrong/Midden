@@ -153,6 +153,111 @@
         }
       }
     },
+    "/api/mcp": {
+      "post": {
+        "tags": [
+          "Meta"
+        ],
+        "summary": "Model Context Protocol endpoint for AI agents",
+        "description": "Speaks JSON-RPC over the stateless form of the Streamable HTTP transport, and takes an API token only, never a session. See the MCP guide.",
+        "operationId": "post_mcp",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A JSON-RPC response.",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "summary": "Not supported; this endpoint has no server-sent stream",
+        "operationId": "get_mcp",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "responses": {
+          "405": {
+            "description": "Always refused.",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Meta"
+        ],
+        "summary": "Not supported; this endpoint has no sessions to end",
+        "operationId": "delete_mcp",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "responses": {
+          "405": {
+            "description": "Always refused.",
+            "content": {
+              "application/json": {}
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [

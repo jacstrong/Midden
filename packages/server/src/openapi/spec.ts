@@ -187,6 +187,32 @@ const routes: RouteDoc[] = [
 
   {
     method: 'post',
+    path: '/api/mcp',
+    tag: 'Meta',
+    summary: 'Model Context Protocol endpoint for AI agents',
+    description:
+      'Speaks JSON-RPC over the stateless form of the Streamable HTTP transport, and takes an API token only, never a session. See the MCP guide.',
+    response: { contentType: 'application/json', description: 'A JSON-RPC response.' },
+  },
+  {
+    method: 'get',
+    path: '/api/mcp',
+    tag: 'Meta',
+    summary: 'Not supported; this endpoint has no server-sent stream',
+    status: 405,
+    response: { contentType: 'application/json', description: 'Always refused.' },
+  },
+  {
+    method: 'delete',
+    path: '/api/mcp',
+    tag: 'Meta',
+    summary: 'Not supported; this endpoint has no sessions to end',
+    status: 405,
+    response: { contentType: 'application/json', description: 'Always refused.' },
+  },
+
+  {
+    method: 'post',
     path: '/api/auth/login',
     tag: 'Auth',
     open: true,

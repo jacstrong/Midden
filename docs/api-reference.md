@@ -36,6 +36,32 @@ Upgrades to a WebSocket. Send `{"t":"hello","caseId":"...","lastSeq":null}` to j
 
 **101** (`text/plain`): Switches to the WebSocket protocol.
 
+### `POST /api/mcp`
+
+Model Context Protocol endpoint for AI agents.
+
+Speaks JSON-RPC over the stateless form of the Streamable HTTP transport, and takes an API token only, never a session. See the MCP guide.
+
+**Access:** Any API token, or a session.
+
+**200** (`application/json`): A JSON-RPC response.
+
+### `GET /api/mcp`
+
+Not supported; this endpoint has no server-sent stream.
+
+**Access:** Any API token, or a session.
+
+**405** (`application/json`): Always refused.
+
+### `DELETE /api/mcp`
+
+Not supported; this endpoint has no sessions to end.
+
+**Access:** Any API token, or a session.
+
+**405** (`application/json`): Always refused.
+
 ## Auth
 
 Signing in. Scripts should use an API token instead.
