@@ -375,6 +375,7 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
     '/api/cases/:id/scans/:scanId/hosts/:ip',
     async (req) => {
       accessOrThrow(app, req, req.params.id, 'read');
+      loadScan(app, req.params.id, req.params.scanId);
       const r = app.db.get<HostRow>(
         'SELECT * FROM scan_hosts WHERE scan_id = ? AND ip = ?',
         req.params.scanId,
