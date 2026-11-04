@@ -1,0 +1,105 @@
+# There is no replica count, on purpose. Midden keeps its data in SQLite on one volume and its
+# live case rooms in memory, so it runs as exactly one pod. See docs/kubernetes.md.
+
+image:
+  repository: ghcr.io/jacstrong/midden
+  # Defaults to the chart's appVersion.
+  tag: ''
+  # Pin an exact image, e.g. sha256:abc... Takes priority over the tag.
+  digest: ''
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The URL people reach Midden at, e.g. https://midden.corp.example. Used for WebSocket origin
+# checks, secure cookies and the SSO redirect. Worked out from the ingress or route if left empty.
+publicOrigin: ''
+
+# Trust X-Forwarded-* headers. If null, this is on when an ingress or route is enabled.
+trustProxy: null
+
+# Settings passed to the server. See the configuration table in docs/deploy.md.
+config:
+  openCases: true
+  maxUploadMb: 25
+  caseQuotaMb: 2048
+  loginRateLimit: 30
+  argon2MemoryKib: 65536
+  logLevel: info
+
+# The first admin, created only when there are no users yet. Without a secret, a one-time password
+# is written to the pod log on first boot.
+admin:
+  username: admin
+  # A secret holding the password. Leave empty to use the one-time password.
+  existingSecret: ''
+  passwordKey: password
+
+# OpenID Connect sign-in, alongside local accounts. Off until an issuer is set.
+oidc:
+  issuer: ''
+  clientId: ''
+  # A secret holding the client secret. Required when an issuer is set.
+  existingSecret: ''
+  clientSecretKey: client-secret
+  scopes: ''
+  adminClaim: ''
+  adminValue: ''
+
+# Where cases, scans and evidence live. This volume is the whole installation.
+persistence:
+  # Use a claim you already have. The rest of this section is then ignored.
+  existingClaim: ''
+  size: 20Gi
+  # Empty uses the cluster's default storage class. Use one with real block storage: SQLite
+  # relies on file locking that many NFS setups get wrong.
+  storageClass: ''
+  accessMode: ReadWriteOnce
+  # Keep the volume through `helm uninstall`, so that removing the chart can't destroy evidence.
+  keepOnUninstall: true
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ''
+  annotations: {}
+  host: midden.example.com
+  # Name of a TLS secret for the host. Empty serves plain HTTP from the ingress.
+  tlsSecretName: ''
+
+# A Gateway API route, as an alternative to an ingress.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # e.g. [{ name: my-gateway, namespace: gateway-system }]
+  parentRefs: []
+  host: midden.example.com
+  # Whether the gateway's listener terminates TLS, for working out publicOrigin.
+  https: true
+
+# Only let traffic reach the pod from these sources, e.g. your ingress controller's namespace.
+networkPolicy:
+  enabled: false
+  # Standard NetworkPolicy `from` entries.
+  from: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    # Ingesting a /16 scan with service detection needs room. Lower this for small clusters.
+    memory: 2Gi
+
+# Extra environment variables, e.g. [{ name: MIDDEN_NODE_HEAP_MB, value: '1024' }].
+extraEnv: []
+extraEnvFrom: []
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

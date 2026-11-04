@@ -1,0 +1,18 @@
+apiVersion: v2
+name: midden
+description: Cyber hunt and DCO attack reconstruction with terrain mapping. Self-hosted and collaborative.
+type: application
+# Both versions are set from the git tag when a release packages this chart.
+version: 0.0.0
+appVersion: latest
+kubeVersion: '>=1.27.0-0'
+home: https://github.com/jacstrong/Midden
+sources:
+  - https://github.com/jacstrong/Midden
+keywords:
+  - dfir
+  - incident-response
+  - threat-hunting
+  - nmap
+annotations:
+  artifacthub.io/license: Apache-2.0

@@ -1,0 +1,165 @@
+{{- if and .Values.oidc.issuer (or (not .Values.oidc.clientId) (not .Values.oidc.existingSecret)) }}
+{{- fail "oidc.issuer needs oidc.clientId and oidc.existingSecret as well" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "midden.fullname" . }}
+  labels:
+    {{- include "midden.labels" . | nindent 4 }}
+spec:
+  # One pod, always. SQLite and the live case rooms cannot be shared between pods.
+  replicas: 1
+  # Stop the old pod before starting the new one, so two never hold the database at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "midden.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "midden.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "midden.fullname" . }}
+      automountServiceAccountToken: false
+      # Otherwise a Service named "midden" injects MIDDEN_PORT=tcp://..., which the server reads as
+      # its listening port and refuses to start.
+      enableServiceLinks: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        # The image's `node` user. fsGroup makes the volume writable by it.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: midden
+          image: {{ include "midden.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: MIDDEN_PORT
+              value: "8080"
+            {{- with (include "midden.publicOrigin" .) }}
+            - name: MIDDEN_PUBLIC_ORIGIN
+              value: {{ . | quote }}
+            {{- end }}
+            - name: MIDDEN_TRUST_PROXY
+              value: {{ include "midden.trustProxy" . | quote }}
+            - name: MIDDEN_OPEN_CASES
+              value: {{ .Values.config.openCases | quote }}
+            - name: MIDDEN_MAX_UPLOAD_MB
+              value: {{ .Values.config.maxUploadMb | quote }}
+            - name: MIDDEN_CASE_QUOTA_MB
+              value: {{ .Values.config.caseQuotaMb | quote }}
+            - name: MIDDEN_LOGIN_RATE_LIMIT
+              value: {{ .Values.config.loginRateLimit | quote }}
+            - name: MIDDEN_ARGON2_MEMORY_KIB
+              value: {{ .Values.config.argon2MemoryKib | quote }}
+            - name: MIDDEN_LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: MIDDEN_ADMIN_USER
+              value: {{ .Values.admin.username | quote }}
+            {{- with .Values.admin.existingSecret }}
+            - name: MIDDEN_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.admin.passwordKey }}
+            {{- end }}
+            {{- if .Values.oidc.issuer }}
+            - name: MIDDEN_OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: MIDDEN_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            - name: MIDDEN_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.oidc.existingSecret }}
+                  key: {{ .Values.oidc.clientSecretKey }}
+            {{- with .Values.oidc.scopes }}
+            - name: MIDDEN_OIDC_SCOPES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.oidc.adminClaim }}
+            - name: MIDDEN_OIDC_ADMIN_CLAIM
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.oidc.adminValue }}
+            - name: MIDDEN_OIDC_ADMIN_VALUE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # Migrations run at startup and can take a while on a large database.
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "midden.claimName" . }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
