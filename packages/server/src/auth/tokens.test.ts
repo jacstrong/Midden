@@ -128,6 +128,35 @@ describe('API tokens', () => {
     }
   });
 
+  it('cannot be talked past with an encoded path', async () => {
+    const root = await login(app, 'root');
+    const { token } = await mint(root);
+    const reader = await mint(root, { name: 'reader' });
+    for (const url of ['/%61pi/admin/stats', '/api/%61dmin/stats', '/%61%70%69/admin/stats']) {
+      const res = await app.inject({ method: 'GET', url, ...bearer(token) });
+      expect([url, res.statusCode, res.json().error.code]).toEqual([url, 403, 'session_required']);
+    }
+    const write = await app.inject({
+      method: 'POST',
+      url: `/%61pi/cases/${caseId}/ops`,
+      ...bearer(reader.token),
+      payload: noop,
+    });
+    expect(write.statusCode).toBe(403);
+    expect(write.json().error.code).toBe('read_only_token');
+  });
+
+  it('still requires the CSRF header on an encoded path', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/%61pi/cases`,
+      headers: { cookie: ann },
+      payload: { name: 'forged' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('csrf');
+  });
+
   it('classifies a route it has never heard of as browser-only', () => {
     expect(tokenMayUse('write', 'POST', '/api/some/future/route')).toBe('browser_only');
     expect(tokenMayUse('write', 'GET', undefined)).toBeNull();

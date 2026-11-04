@@ -102,7 +102,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   // What a token may touch; see tokenMayUse.
   app.addHook('onRequest', async (req) => {
-    if (!req.token || !req.url.startsWith('/api/')) return;
+    if (!req.token || !isApiRoute(req)) return;
     const denied = tokenMayUse(req.token.scope, req.method, req.routeOptions.url);
     if (denied === 'read_only')
       throw new HttpError(403, 'This API token is read-only', 'read_only_token');
@@ -114,7 +114,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   // one on every mutating API call blocks form-post and simple-request forgery. A token is not
   // ambient the way a cookie is, so a request carrying a valid one cannot be forged this way.
   app.addHook('onRequest', async (req) => {
-    if (!req.url.startsWith('/api/') || req.token) return;
+    if (!isApiRoute(req) || req.token) return;
     if (req.routeOptions.url === '/api/mcp') return; // refuses anything but a token by itself
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
     if (req.headers.upgrade) return;
@@ -222,6 +222,15 @@ function registerStatic(app: FastifyInstance, version: string): void {
       return reply.status(404).send({ error: { code: 'notfound', message: 'Not found' } });
     return sendIndex(req, reply);
   });
+}
+
+/**
+ * Whether the router matched an API route. This asks the router rather than reading `req.url`,
+ * because the router decodes paths: `/%61pi/admin/stats` reaches the same handler as
+ * `/api/admin/stats`, but does not start with `/api/`.
+ */
+function isApiRoute(req: FastifyRequest): boolean {
+  return req.routeOptions.url?.startsWith('/api/') ?? false;
 }
 
 export function requireUser(req: FastifyRequest): User {
