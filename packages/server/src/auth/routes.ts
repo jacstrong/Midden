@@ -20,16 +20,16 @@ import {
   type User,
 } from './sessions.js';
 
-const Login = z.object({
+export const Login = z.object({
   username: z.string().trim().min(1).max(64),
   password: z.string().min(1).max(1024),
 });
-const Password = z.object({
+export const Password = z.object({
   current: z.string().max(1024).optional(),
   next: z.string().min(10).max(1024),
 });
 const Role = z.enum(['admin', 'analyst', 'viewer']);
-const CreateUser = z.object({
+export const CreateUser = z.object({
   username: z
     .string()
     .trim()
@@ -40,7 +40,7 @@ const CreateUser = z.object({
   role: Role.default('analyst'),
   password: z.string().min(10).max(1024).optional(),
 });
-const PatchUser = z.object({
+export const PatchUser = z.object({
   displayName: z.string().trim().max(120).optional(),
   role: Role.optional(),
   disabled: z.boolean().optional(),

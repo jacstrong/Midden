@@ -25,6 +25,7 @@ import { oidcRoutes } from './auth/oidc.js';
 import { caseRoutes } from './cases/routes.js';
 import { wsRoutes } from './sync/ws.js';
 import { adminRoutes } from './admin/routes.js';
+import { openApiDocument } from './openapi/spec.js';
 import type { Config } from './config.js';
 
 declare module 'fastify' {
@@ -33,6 +34,8 @@ declare module 'fastify' {
     cfg: Config;
     runtimes: RuntimeRegistry;
     blobs: BlobStore;
+    /** Every `METHOD /api/...` route, so the API description can be checked against reality. */
+    apiRoutes: string[];
     /** Background ingests still running; awaited on close so tests and shutdown are deterministic. */
     pendingIngests: Set<Promise<unknown>>;
   }
@@ -67,6 +70,12 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.decorate('runtimes', new RuntimeRegistry(db));
   app.decorate('blobs', new BlobStore(db, cfg.blobDir ?? joinPath(cfg.dataDir, 'blobs')));
   app.decorate('pendingIngests', new Set<Promise<unknown>>());
+  app.decorate('apiRoutes', []);
+  app.addHook('onRoute', (route) => {
+    if (!route.url.startsWith('/api/')) return;
+    for (const m of [route.method].flat())
+      if (m !== 'HEAD') app.apiRoutes.push(`${m} ${route.url}`);
+  });
   app.decorateRequest('user', null);
   app.decorateRequest('token', null);
 
@@ -135,6 +144,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       },
     });
   });
+
+  app.get('/api/openapi.json', async () => openApiDocument());
 
   app.get('/api/health', async () => {
     let diskFreeMb: number | null;

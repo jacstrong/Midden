@@ -30,7 +30,7 @@ import { TooLargeError } from '../blobs/store.js';
 import { ingestScan } from './ingest.js';
 import { deleteScanRows } from './insert.js';
 
-const HostsQuery = z.object({
+export const HostsQuery = z.object({
   after: z.string().max(64).optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(200),
   net: z.string().max(64).optional(),
@@ -39,7 +39,7 @@ const HostsQuery = z.object({
   q: z.string().max(200).optional(),
   flagged: z.enum(['0', '1']).optional(),
 });
-const MapQuery = z.object({
+export const MapQuery = z.object({
   layout: z.enum(['subnet', 'trace']).default('subnet'),
   bits: z.coerce.number().int().min(8).max(32).default(24),
   net: z.string().max(64).optional(),

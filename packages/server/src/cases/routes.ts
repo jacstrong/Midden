@@ -9,7 +9,7 @@ import { newId, nowIso } from '../lib/ids.js';
 import { csvEscape } from '@midden/core';
 import { actorName } from './runtime.js';
 
-const CreateCase = z.object({
+export const CreateCase = z.object({
   name: z.string().trim().min(1).max(200),
   number: z.string().trim().max(64).default(''),
   analyst: z.string().trim().max(120).default(''),
@@ -17,18 +17,18 @@ const CreateCase = z.object({
   summary: z.string().max(20_000).default(''),
   restricted: z.boolean().optional(),
 });
-const PatchCase = z.object({
+export const PatchCase = z.object({
   archived: z.boolean().optional(),
   restricted: z.boolean().optional(),
 });
-const SubmitOp = z.object({
+export const SubmitOp = z.object({
   op: z.unknown(),
   clientOpId: z.string().min(1).max(64).optional(),
   baseSeq: z.number().int().nonnegative().optional(),
 });
-const MemberRole = z.object({ role: z.enum(['owner', 'editor', 'viewer']) });
-const Revert = z.object({ seq: z.number().int().positive() });
-const ImportBody = z.object({ file: z.unknown() });
+export const MemberRole = z.object({ role: z.enum(['owner', 'editor', 'viewer']) });
+export const Revert = z.object({ seq: z.number().int().positive() });
+export const ImportBody = z.object({ file: z.unknown() });
 
 interface FullCaseRow extends CaseRow {
   name: string;
