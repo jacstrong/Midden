@@ -1,0 +1,37 @@
+# Midden behind Caddy, which handles the certificates. See docs/https-proxy.md.
+services:
+  midden:
+    image: ghcr.io/jacstrong/midden:latest
+    # Reachable only from Caddy. Nothing else publishes a port to it.
+    expose:
+      - '8080'
+    volumes:
+      - midden-data:/data
+    environment:
+      MIDDEN_PUBLIC_ORIGIN: https://${MIDDEN_HOSTNAME:?set MIDDEN_HOSTNAME in docker/.env}
+      MIDDEN_TRUST_PROXY: 'true'
+      MIDDEN_ADMIN_USER: admin
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      MIDDEN_HOSTNAME: ${MIDDEN_HOSTNAME:?set MIDDEN_HOSTNAME in docker/.env}
+    depends_on:
+      - midden
+    restart: unless-stopped
+
+volumes:
+  # Cases, scans and evidence. This volume is the whole installation.
+  midden-data:
+  # Holds the certificates and, with `tls internal`, the private CA's key.
+  caddy-data:
+  caddy-config:

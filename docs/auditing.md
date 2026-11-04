@@ -28,7 +28,12 @@ docker buildx imagetools inspect ghcr.io/jacstrong/midden:latest \
   --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > midden-image.spdx.json
 ```
 
-To read the build provenance, use `{{ json .Provenance }}` in the same command.
+To read the build provenance:
+
+```bash
+docker buildx imagetools inspect ghcr.io/jacstrong/midden:latest \
+  --format '{{ json (index .Provenance "linux/amd64").SLSA }}'
+```
 
 ## Checking for known vulnerabilities
 

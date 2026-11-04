@@ -1,0 +1,6 @@
+{$MIDDEN_HOSTNAME} {
+	# Add `tls internal` here for a network Let's Encrypt can't reach. See docs/https-proxy.md.
+
+	# Caddy passes WebSocket upgrades and the X-Forwarded-* headers by default.
+	reverse_proxy midden:8080
+}

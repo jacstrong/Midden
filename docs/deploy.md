@@ -17,11 +17,12 @@ database and the file store. There is nothing else to install and nothing to con
 docker run -d --name midden \
   -p 8080:8080 \
   -v "$PWD/midden-data:/data" \
-  -e MIDDEN_SECRET="$(openssl rand -base64 32)" \
   -e MIDDEN_ADMIN_USER=admin \
   -e MIDDEN_ADMIN_PASSWORD='choose something long' \
   ghcr.io/jacstrong/midden:latest
 ```
+
+On Linux, the container runs as a non-root user (UID 1000), so create the data directory with `mkdir midden-data && sudo chown 1000:1000 midden-data` first. If Docker creates the directory for you, root owns it and Midden can't write to it.
 
 Open `http://localhost:8080`, sign in as the admin, and change the password when prompted. If
 you leave `MIDDEN_ADMIN_PASSWORD` unset, Midden generates a one-time password and writes it to
@@ -38,6 +39,13 @@ Or with compose, from a checkout:
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
+
+## Other ways to run it
+
+- [Compose with HTTPS](https-proxy.md), with Caddy handling certificates, is the usual setup for a team.
+- [Kubernetes](kubernetes.md), with a Helm chart.
+- [Without internet access](air-gapped.md), for isolated networks.
+- [Directly on Node](#running-without-docker), or [with no server at all](#no-server-at-all).
 
 ## Running on a Raspberry Pi
 
@@ -60,7 +68,6 @@ Everything is an environment variable. All of them are optional except where not
 | `MIDDEN_PORT`                                 | `8080`    | Listening port                                                                                                                 |
 | `MIDDEN_HOST`                                 | `0.0.0.0` | Listening address                                                                                                              |
 | `MIDDEN_DATA`                                 | `/data`   | Database, blobs and temp files                                                                                                 |
-| `MIDDEN_SECRET`                               | none      | Signing secret for session cookies. Set it in production.                                                                      |
 | `MIDDEN_PUBLIC_ORIGIN`                        | none      | Public URL, e.g. `https://midden.corp.example`. Used for WebSocket origin checks and the OIDC redirect. Set it behind a proxy. |
 | `MIDDEN_TRUST_PROXY`                          | `false`   | Trust `X-Forwarded-*`. Turn on behind a reverse proxy.                                                                         |
 | `MIDDEN_OPEN_CASES`                           | `true`    | Every analyst can edit every case. Turn off to make new cases members-only.                                                    |
@@ -163,6 +170,10 @@ without losing history.
 `GET /api/health` returns version, Node and SQLite versions, whether argon2 is available, and
 free space on the data volume. The container healthcheck already polls it. Logs are JSON
 (pino) on stdout.
+
+## Connecting other tools
+
+Midden has a documented [HTTP API](api.md) for scripts and integrations, and an [MCP endpoint](mcp.md) for AI agents. Both use API tokens, which each user creates under **API tokens**. To review what's in a release, see [Auditing a release](auditing.md).
 
 ## Sizing
 
