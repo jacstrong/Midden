@@ -217,4 +217,42 @@ describe('websocket sync', () => {
     expect(await v.next('reject')).toMatchObject({ code: 'readonly' });
     v.close();
   });
+
+  it('holds an API token to its scope over the socket and names it on the op', async () => {
+    const mint = async (name: string, scope: string): Promise<string> =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/tokens',
+          ...as(ann),
+          payload: { name, scope },
+        })
+      ).json().token as string;
+    const open = async (token: string): Promise<Client> => {
+      const ws = new WebSocket(`${base.replace('http', 'ws')}/api/ws`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.once('open', () => resolve());
+        ws.once('error', reject);
+      });
+      return new Client(ws);
+    };
+
+    const reader = await open(await mint('reader', 'read'));
+    reader.send({ t: 'hello', caseId, lastSeq: null });
+    await reader.next('snapshot');
+    reader.send({ t: 'op', clientOpId: 'r1', baseSeq: 1, op: { type: 'noop' } });
+    expect(await reader.next('reject')).toMatchObject({ code: 'readonly' });
+
+    const writer = await open(await mint('writer', 'write'));
+    writer.send({ t: 'hello', caseId, lastSeq: null });
+    await writer.next('snapshot');
+    writer.send({ t: 'op', clientOpId: 'w1', baseSeq: 1, op: { type: 'noop' } });
+    await writer.next('ack');
+    const seen = await reader.next('op');
+    expect(seen.actor.name).toBe('ANN via writer');
+    reader.ws.close();
+    writer.ws.close();
+  });
 });

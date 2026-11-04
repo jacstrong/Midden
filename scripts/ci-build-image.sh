@@ -7,7 +7,8 @@ TAG="${2:?tag}"
 PUSH="${3:-}"
 EXTRA=()
 if [ "$PUSH" = "--push" ]; then
-  EXTRA+=(--push)
+  # Attach an SBOM of the whole image, OS packages and Node included, and build provenance.
+  EXTRA+=(--push --sbom=true --provenance=mode=max)
 else
   # Multi-arch manifests cannot be loaded into the local daemon; just verify the build.
   EXTRA+=(--output type=image,push=false)

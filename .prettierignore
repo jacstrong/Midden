@@ -7,3 +7,7 @@ pnpm-lock.yaml
 playwright-report
 test-results
 .vitepress/cache
+docs/openapi.json
+docs/api-reference.md
+charts/midden/templates
+release

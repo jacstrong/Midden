@@ -38,6 +38,15 @@ jobs:
       - run: scripts/ci-build-image.sh "${{ steps.img.outputs.image }}" "${{ steps.img.outputs.version }}" --push
       - run: scripts/ci-build-image.sh "${{ steps.img.outputs.image }}" latest --push
       - run: scripts/ci-release-assets.sh "${{ steps.img.outputs.version }}"
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.0
+      - name: Publish the Helm chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          scripts/ci-chart.sh package "${{ steps.img.outputs.version }}" "oci://${{ steps.img.outputs.image }}/charts"
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*

@@ -47,6 +47,17 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report
 
+  chart:
+    name: helm chart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.0
+      - run: scripts/ci-chart.sh check
+
   image:
     name: multi-arch image (no push)
     runs-on: ubuntu-24.04

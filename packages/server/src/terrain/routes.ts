@@ -23,13 +23,14 @@ import {
   type ScriptOutput,
 } from '@midden/core';
 import { accessOrThrow } from '../cases/routes.js';
+import { actorOf } from '../app.js';
 import { HttpError, badRequest, notFound } from '../lib/errors.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { TooLargeError } from '../blobs/store.js';
 import { ingestScan } from './ingest.js';
 import { deleteScanRows } from './insert.js';
 
-const HostsQuery = z.object({
+export const HostsQuery = z.object({
   after: z.string().max(64).optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(200),
   net: z.string().max(64).optional(),
@@ -38,7 +39,7 @@ const HostsQuery = z.object({
   q: z.string().max(200).optional(),
   flagged: z.enum(['0', '1']).optional(),
 });
-const MapQuery = z.object({
+export const MapQuery = z.object({
   layout: z.enum(['subnet', 'trace']).default('subnet'),
   bits: z.coerce.number().int().min(8).max(32).default(24),
   net: z.string().max(64).optional(),
@@ -276,7 +277,7 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
       'parsing',
     );
     const rt = app.runtimes.get(caseId);
-    const actor = { id: user.id, name: user.displayName };
+    const actor = actorOf(req);
     const added = rt.appendOp(actor, { type: 'scan.add', scan: meta } satisfies Op, {
       canEdit: access.edit,
     });
@@ -375,6 +376,7 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
     '/api/cases/:id/scans/:scanId/hosts/:ip',
     async (req) => {
       accessOrThrow(app, req, req.params.id, 'read');
+      loadScan(app, req.params.id, req.params.scanId);
       const r = app.db.get<HostRow>(
         'SELECT * FROM scan_hosts WHERE scan_id = ? AND ip = ?',
         req.params.scanId,
@@ -497,11 +499,11 @@ export async function terrainRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string; scanId: string } }>(
     '/api/cases/:id/scans/:scanId',
     async (req) => {
-      const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
+      const { access } = accessOrThrow(app, req, req.params.id, 'edit');
       const s = loadScan(app, req.params.id, req.params.scanId);
       const rt = app.runtimes.get(req.params.id);
       const r = rt.appendOp(
-        { id: user.id, name: user.displayName },
+        actorOf(req),
         { type: 'scan.remove', id: s.id },
         { canEdit: access.edit },
       );

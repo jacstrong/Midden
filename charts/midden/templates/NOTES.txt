@@ -1,0 +1,19 @@
+Midden is starting. It runs as a single pod by design.
+{{ with (include "midden.publicOrigin" .) }}
+Open {{ . }}
+{{- else }}
+No ingress or route is enabled, so reach it with a port-forward:
+
+  kubectl port-forward -n {{ $.Release.Namespace }} svc/{{ include "midden.fullname" $ }} 8080:{{ $.Values.service.port }}
+
+and open http://localhost:8080. Set publicOrigin or an ingress before putting people on it.
+{{- end }}
+{{ if not .Values.admin.existingSecret }}
+Sign in as "{{ .Values.admin.username }}" with the one-time password from the first boot's log:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "midden.fullname" . }} | grep 'one-time password'
+{{ end }}
+The volume {{ include "midden.claimName" . }} holds every case, scan and attachment.
+{{- if .Values.persistence.keepOnUninstall }} It stays behind after `helm uninstall`.{{ end }}
+
+Back up before upgrading: https://github.com/jacstrong/Midden/blob/main/docs/kubernetes.md

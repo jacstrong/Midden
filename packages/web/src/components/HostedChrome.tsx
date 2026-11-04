@@ -37,6 +37,13 @@ export function HostedChrome({ title, children }: { title: string; children: Rea
               Users
             </button>
           )}
+          <button
+            className="btn ghost"
+            onClick={() => navigate({ kind: 'tokens' })}
+            data-testid="nav-tokens"
+          >
+            API tokens
+          </button>
           <button className="btn ghost" onClick={() => navigate({ kind: 'password' })}>
             Password
           </button>

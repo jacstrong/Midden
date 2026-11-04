@@ -46,6 +46,20 @@ image:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+.helm:
+  image:
+    name: alpine/helm:3.20.0
+    entrypoint: ['']
+
+chart:
+  extends: .helm
+  stage: test
+  script:
+    - scripts/ci-chart.sh check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 release:
   extends: .docker
   stage: release
@@ -68,5 +82,17 @@ release-assets:
   release:
     tag_name: $CI_COMMIT_TAG
     description: 'Midden $CI_COMMIT_TAG'
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+
+release-chart:
+  extends: .helm
+  stage: release
+  needs: [release-assets]
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | helm registry login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - scripts/ci-chart.sh package "${CI_COMMIT_TAG#v}" "oci://$CI_REGISTRY_IMAGE/charts"
+  artifacts:
+    paths: [release]
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
