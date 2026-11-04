@@ -5,7 +5,7 @@ database and the file store. There is nothing else to install and nothing to con
 
 ## What you need
 
-- Docker with buildx, or a machine with Node 24 if you would rather run it directly.
+- Docker with buildx, or a machine with Node 24.22.1 or newer if you would rather run it directly.
 - One writable directory for `/data`. That directory _is_ the installation: copy it and you
   have copied every case, scan and attachment.
 - A laptop or a Raspberry Pi 4/5. Both are supported targets; images are published for

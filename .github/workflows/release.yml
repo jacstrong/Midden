@@ -17,6 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true
       - run: corepack enable
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends nmap
       - run: SKIP_E2E=1 scripts/ci-test.sh

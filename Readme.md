@@ -88,7 +88,7 @@ legacy            the original prototypes, kept as parity oracles.
 
 ## Development
 
-Requires Node 24 and pnpm 10 (`corepack enable`).
+Requires Node 24.22.1 or newer and pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install
