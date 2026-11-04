@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "midden.fullname" . }}-test
+  labels:
+    {{- include "midden.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: health
+      image: {{ include "midden.image" . | quote }}
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+      command:
+        - node
+        - -e
+        - >-
+          fetch('http://{{ include "midden.fullname" . }}:{{ .Values.service.port }}/api/health')
+          .then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))

@@ -4,7 +4,7 @@
 # Stage 2 runs once per target platform and only copies files, so the arm64 image
 # never runs npm/pnpm under QEMU.
 
-FROM --platform=$BUILDPLATFORM node:24.13-alpine AS build
+FROM --platform=$BUILDPLATFORM node:24.22-alpine AS build
 RUN corepack enable
 WORKDIR /src
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc tsconfig.base.json ./
@@ -18,9 +18,10 @@ RUN pnpm --filter @midden/core build \
  && pnpm --filter @midden/server build \
  && pnpm --filter @midden/web build \
  && pnpm --filter @midden/server deploy --legacy --prod --ignore-scripts /out/server \
- && sh scripts/check-no-native.sh /out/server/node_modules
+ && sh scripts/check-no-native.sh /out/server/node_modules \
+ && node scripts/gen-sbom.mjs --check --deployed /out/server
 
-FROM node:24.13-alpine AS runtime
+FROM node:24.22-alpine AS runtime
 ENV NODE_ENV=production \
     NODE_OPTIONS=--no-warnings=ExperimentalWarning \
     MIDDEN_DATA=/data \

@@ -382,4 +382,37 @@ describe('terrain routes', () => {
     });
     expect(map.json().nets).toHaveLength(33);
   }, 60_000);
+
+  it('does not serve a host from a scan that belongs to another case', async () => {
+    const res = await upload(ann, { name: 'lab-small.xml', content: fixture('lab-small.xml') });
+    const scanId = res.json().scan.id as string;
+    await waitReady(app, ann, caseId, scanId);
+    const own = await app.inject({
+      method: 'GET',
+      url: `/api/cases/${caseId}/scans/${scanId}/hosts/10.20.0.1`,
+      ...as(ann),
+    });
+    expect(own.statusCode).toBe(200);
+
+    // Restrict the scan's case, and give Vic a different case they can read.
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/cases/${caseId}`,
+      ...as(ann),
+      payload: { restricted: true },
+    });
+    const other = await app.inject({
+      method: 'POST',
+      url: '/api/cases',
+      ...as(ann),
+      payload: { name: 'Open case' },
+    });
+    const otherId = other.json().case.id as string;
+    const crossed = await app.inject({
+      method: 'GET',
+      url: `/api/cases/${otherId}/scans/${scanId}/hosts/10.20.0.1`,
+      ...as(vic),
+    });
+    expect(crossed.statusCode).toBe(404);
+  });
 });

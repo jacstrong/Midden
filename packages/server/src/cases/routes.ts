@@ -1,14 +1,15 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { mergeOps, readCaseFile, writeCaseFile, type Op } from '@midden/core';
-import { requireUser } from '../app.js';
+import { actorOf, requireUser } from '../app.js';
 import { caseAccess, type CaseAccess, type CaseRole, type CaseRow } from '../auth/permissions.js';
 import { findUserById, type User } from '../auth/sessions.js';
 import { HttpError, badRequest, forbidden, notFound } from '../lib/errors.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { csvEscape } from '@midden/core';
+import { actorName } from './runtime.js';
 
-const CreateCase = z.object({
+export const CreateCase = z.object({
   name: z.string().trim().min(1).max(200),
   number: z.string().trim().max(64).default(''),
   analyst: z.string().trim().max(120).default(''),
@@ -16,18 +17,18 @@ const CreateCase = z.object({
   summary: z.string().max(20_000).default(''),
   restricted: z.boolean().optional(),
 });
-const PatchCase = z.object({
+export const PatchCase = z.object({
   archived: z.boolean().optional(),
   restricted: z.boolean().optional(),
 });
-const SubmitOp = z.object({
+export const SubmitOp = z.object({
   op: z.unknown(),
   clientOpId: z.string().min(1).max(64).optional(),
   baseSeq: z.number().int().nonnegative().optional(),
 });
-const MemberRole = z.object({ role: z.enum(['owner', 'editor', 'viewer']) });
-const Revert = z.object({ seq: z.number().int().positive() });
-const ImportBody = z.object({ file: z.unknown() });
+export const MemberRole = z.object({ role: z.enum(['owner', 'editor', 'viewer']) });
+export const Revert = z.object({ seq: z.number().int().positive() });
+export const ImportBody = z.object({ file: z.unknown() });
 
 interface FullCaseRow extends CaseRow {
   name: string;
@@ -153,7 +154,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
         modified: ts,
       },
     };
-    rt.appendOp({ id: user.id, name: user.displayName }, meta, { canEdit: true });
+    rt.appendOp(actorOf(req), meta, { canEdit: true });
     reply.status(201);
     return { case: summary(app, loadCase(app, id), user) };
   });
@@ -204,10 +205,10 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/api/cases/:id/ops', async (req) => {
-    const { user, access } = accessOrThrow(app, req, req.params.id, 'read');
+    const { access } = accessOrThrow(app, req, req.params.id, 'read');
     const body = SubmitOp.parse(req.body);
     const rt = app.runtimes.get(req.params.id);
-    const r = rt.appendOp({ id: user.id, name: user.displayName }, body.op, {
+    const r = rt.appendOp(actorOf(req), body.op, {
       clientOpId: body.clientOpId,
       baseSeq: body.baseSeq,
       canEdit: access.edit,
@@ -249,7 +250,8 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
     const items = rows.map((r) => ({
       seq: Number(r.seq),
       ts: r.ts,
-      actor: { id: r.actor_id, name: r.display_name ?? r.actor_id },
+      actor: { id: r.actor_id, name: actorName(r.display_name ?? r.actor_id, r.via) },
+      via: r.via,
       type: r.type,
       op: JSON.parse(r.payload) as Op,
       inverse: r.inverse ? (JSON.parse(r.inverse) as Op) : null,
@@ -281,7 +283,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/api/cases/:id/revert', async (req) => {
-    const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
+    const { access } = accessOrThrow(app, req, req.params.id, 'edit');
     const { seq } = Revert.parse(req.body);
     const target = app.db.get<{ inverse: string | null; type: string }>(
       'SELECT inverse, type FROM ops WHERE case_id = ? AND seq = ?',
@@ -292,7 +294,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
     if (!target.inverse) throw badRequest('This op has no recorded inverse');
     const rt = app.runtimes.get(req.params.id);
     const op: Op = { type: 'op.revert', targetSeq: seq, inverse: JSON.parse(target.inverse) as Op };
-    const r = rt.appendOp({ id: user.id, name: user.displayName }, op, { canEdit: access.edit });
+    const r = rt.appendOp(actorOf(req), op, { canEdit: access.edit });
     if (!r.ok) throw new HttpError(400, r.message, r.code);
     rt.broadcast({ t: 'op', ...r.broadcast });
     return { seq: r.seq };
@@ -306,12 +308,12 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>('/api/cases/:id/import', async (req) => {
-    const { user, access } = accessOrThrow(app, req, req.params.id, 'edit');
+    const { access } = accessOrThrow(app, req, req.params.id, 'edit');
     const { file } = ImportBody.parse(req.body);
     const parsed = readCaseFile(file);
     const rt = app.runtimes.get(req.params.id);
     const op = mergeOps(rt.state, parsed.state);
-    const r = rt.appendOp({ id: user.id, name: user.displayName }, op, { canEdit: access.edit });
+    const r = rt.appendOp(actorOf(req), op, { canEdit: access.edit });
     if (!r.ok) throw new HttpError(400, r.message, r.code);
     rt.broadcast({ t: 'op', ...r.broadcast });
     return { seq: r.seq, report: parsed.report };
@@ -367,6 +369,7 @@ interface OpRow {
   seq: number;
   ts: string;
   actor_id: string;
+  via: string | null;
   display_name: string | null;
   type: string;
   payload: string;

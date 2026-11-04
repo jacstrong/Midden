@@ -5,7 +5,7 @@
   "description": "Cyber hunt / DCO attack reconstruction and terrain mapping",
   "type": "module",
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=24.22.1",
     "pnpm": ">=10"
   },
   "packageManager": "pnpm@10.33.2",
@@ -22,6 +22,7 @@
     "e2e": "pnpm --filter @midden/e2e test",
     "check:native": "scripts/check-no-native.sh",
     "check:nmap": "node --no-warnings=ExperimentalWarning scripts/check-nmap-commands.ts",
+    "docs:api": "node --no-warnings --experimental-transform-types --import ./scripts/dev-ts.mjs scripts/gen-api-docs.ts",
     "site:dev": "pnpm --filter @midden/website dev",
     "site:build": "pnpm --filter @midden/website build"
   },

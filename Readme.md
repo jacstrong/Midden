@@ -39,7 +39,9 @@ Case files move freely between the two, and still open in the original prototype
 ## Running it
 
 See [docs/deploy.md](docs/deploy.md) for the full guide: Raspberry Pi notes, HTTPS, single
-sign-on, backup and restore, and every environment variable.
+sign-on, backup and restore, and every environment variable. There are also guides for
+[Compose with HTTPS](docs/https-proxy.md), [Kubernetes with Helm](docs/kubernetes.md) and
+[networks without internet access](docs/air-gapped.md).
 
 ```bash
 docker run -d --name midden -p 8080:8080 \
@@ -48,7 +50,15 @@ docker run -d --name midden -p 8080:8080 \
   ghcr.io/jacstrong/midden:latest
 ```
 
-For the standalone build, download `midden-standalone.html` from a release and open it.
+For the standalone build, download `midden-standalone-<version>.html` from a release and open it.
+
+## Extending and reviewing Midden
+
+- [API guide](docs/api.md) and [reference](docs/api-reference.md): scripts and integrations, with
+  API tokens and an OpenAPI description.
+- [Connecting AI agents](docs/mcp.md): the built-in MCP endpoint, and what to weigh before giving
+  an agent write access.
+- [Auditing a release](docs/auditing.md): SBOMs, checksums and how to scan a release.
 
 ## Layout
 
@@ -88,7 +98,7 @@ legacy            the original prototypes, kept as parity oracles.
 
 ## Development
 
-Requires Node 24 and pnpm 10 (`corepack enable`).
+Requires Node 24.22.1 or newer and pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install

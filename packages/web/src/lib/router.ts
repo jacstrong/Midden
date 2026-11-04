@@ -9,6 +9,7 @@ export type Route =
   | { kind: 'login' }
   | { kind: 'cases' }
   | { kind: 'users' }
+  | { kind: 'tokens' }
   | { kind: 'password' }
   | { kind: 'case'; caseId: string; view: CaseView }
   | { kind: 'standalone'; view: ViewId };
@@ -27,6 +28,8 @@ export function parseRoute(hash: string, mode: 'server' | 'standalone'): Route {
       return { kind: 'login' };
     case 'users':
       return { kind: 'users' };
+    case 'tokens':
+      return { kind: 'tokens' };
     case 'password':
       return { kind: 'password' };
     case 'c': {
@@ -47,6 +50,8 @@ export function routeHash(r: Route): string {
       return '#/cases';
     case 'users':
       return '#/users';
+    case 'tokens':
+      return '#/tokens';
     case 'password':
       return '#/password';
     case 'case':

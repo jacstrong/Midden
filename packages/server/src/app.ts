@@ -16,13 +16,17 @@ import { type Db, sqliteVersion } from './db/db.js';
 import { migrate } from './db/migrate.js';
 import { argon2Available } from './auth/password.js';
 import { resolveSession, SESSION_COOKIE, type User } from './auth/sessions.js';
+import { tokenRoutes } from './auth/tokenRoutes.js';
+import { bearerToken, resolveToken, tokenMayUse, type TokenIdentity } from './auth/tokens.js';
 import { HttpError } from './lib/errors.js';
-import { RuntimeRegistry } from './cases/runtime.js';
+import { actorName, RuntimeRegistry, type OpActor } from './cases/runtime.js';
 import { authRoutes } from './auth/routes.js';
 import { oidcRoutes } from './auth/oidc.js';
 import { caseRoutes } from './cases/routes.js';
 import { wsRoutes } from './sync/ws.js';
 import { adminRoutes } from './admin/routes.js';
+import { mcpRoutes } from './mcp/routes.js';
+import { openApiDocument } from './openapi/spec.js';
 import type { Config } from './config.js';
 
 declare module 'fastify' {
@@ -31,11 +35,15 @@ declare module 'fastify' {
     cfg: Config;
     runtimes: RuntimeRegistry;
     blobs: BlobStore;
+    /** Every `METHOD /api/...` route, so the API description can be checked against reality. */
+    apiRoutes: string[];
     /** Background ingests still running; awaited on close so tests and shutdown are deterministic. */
     pendingIngests: Set<Promise<unknown>>;
   }
   interface FastifyRequest {
     user: User | null;
+    /** Set when the request authenticated with an API token rather than a session cookie. */
+    token: TokenIdentity | null;
   }
 }
 
@@ -63,7 +71,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.decorate('runtimes', new RuntimeRegistry(db));
   app.decorate('blobs', new BlobStore(db, cfg.blobDir ?? joinPath(cfg.dataDir, 'blobs')));
   app.decorate('pendingIngests', new Set<Promise<unknown>>());
+  app.decorate('apiRoutes', []);
+  app.addHook('onRoute', (route) => {
+    if (!route.url.startsWith('/api/')) return;
+    for (const m of [route.method].flat())
+      if (m !== 'HEAD') app.apiRoutes.push(`${m} ${route.url}`);
+  });
   app.decorateRequest('user', null);
+  app.decorateRequest('token', null);
 
   app.register(cookie);
   app.register(rateLimit, { global: false });
@@ -72,15 +87,35 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limits: { fileSize: cfg.maxUploadMb * 1_048_576, files: 1, fields: 10 },
   });
 
-  // Session resolution for every request.
+  // Who is asking: an API token if one was presented, otherwise the session cookie. A bad token
+  // never falls back to the cookie, so a script cannot quietly run as whoever else is signed in.
   app.addHook('onRequest', async (req) => {
+    const raw = bearerToken(req.headers.authorization);
+    if (raw) {
+      const resolved = resolveToken(db, raw);
+      req.user = resolved?.user ?? null;
+      req.token = resolved?.token ?? null;
+      return;
+    }
     req.user = resolveSession(db, req.cookies[SESSION_COOKIE]);
   });
 
-  // CSRF: browsers cannot add custom headers cross-site without CORS preflight, so requiring
-  // one on every mutating API call blocks form-post and simple-request forgery.
+  // What a token may touch; see tokenMayUse.
   app.addHook('onRequest', async (req) => {
-    if (!req.url.startsWith('/api/')) return;
+    if (!req.token || !isApiRoute(req)) return;
+    const denied = tokenMayUse(req.token.scope, req.method, req.routeOptions.url);
+    if (denied === 'read_only')
+      throw new HttpError(403, 'This API token is read-only', 'read_only_token');
+    if (denied === 'browser_only')
+      throw new HttpError(403, 'This needs a signed-in browser session', 'session_required');
+  });
+
+  // CSRF: browsers cannot add custom headers cross-site without CORS preflight, so requiring
+  // one on every mutating API call blocks form-post and simple-request forgery. A token is not
+  // ambient the way a cookie is, so a request carrying a valid one cannot be forged this way.
+  app.addHook('onRequest', async (req) => {
+    if (!isApiRoute(req) || req.token) return;
+    if (req.routeOptions.url === '/api/mcp') return; // refuses anything but a token by itself
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
     if (req.headers.upgrade) return;
     if (req.headers['x-midden-client'] === undefined)
@@ -112,6 +147,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     });
   });
 
+  app.get('/api/openapi.json', async () => openApiDocument());
+
   app.get('/api/health', async () => {
     let diskFreeMb: number | null;
     try {
@@ -132,12 +169,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   });
 
   app.register(authRoutes);
+  app.register(tokenRoutes);
   app.register(oidcRoutes);
   app.register(caseRoutes);
   app.register(wsRoutes);
   app.register(adminRoutes);
   app.register(terrainRoutes);
   app.register(attachmentRoutes);
+  app.register(mcpRoutes);
 
   registerStatic(app, version);
 
@@ -185,9 +224,26 @@ function registerStatic(app: FastifyInstance, version: string): void {
   });
 }
 
+/**
+ * Whether the router matched an API route. This asks the router rather than reading `req.url`,
+ * because the router decodes paths: `/%61pi/admin/stats` reaches the same handler as
+ * `/api/admin/stats`, but does not start with `/api/`.
+ */
+function isApiRoute(req: FastifyRequest): boolean {
+  return req.routeOptions.url?.startsWith('/api/') ?? false;
+}
+
 export function requireUser(req: FastifyRequest): User {
   if (!req.user) throw new HttpError(401, 'Sign in required', 'unauthorized');
   return req.user;
+}
+
+/** Who to record on an op. Work done with a token says so, under the token's name. */
+export function actorOf(req: FastifyRequest): OpActor {
+  const user = requireUser(req);
+  return req.token
+    ? { id: user.id, name: actorName(user.displayName, req.token.name), via: req.token.name }
+    : { id: user.id, name: user.displayName };
 }
 
 export function requireAdmin(req: FastifyRequest): User {

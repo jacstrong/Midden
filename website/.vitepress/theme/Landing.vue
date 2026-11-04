@@ -24,13 +24,6 @@ const lines: Tok[][] = [
   ],
   [
     ['flag', '  -e'],
-    ['env', ' MIDDEN_SECRET'],
-    ['txt', '='],
-    ['str', '"$(openssl rand -base64 32)"'],
-    ['txt', ' \\'],
-  ],
-  [
-    ['flag', '  -e'],
     ['env', ' MIDDEN_ADMIN_USER'],
     ['txt', '=admin \\'],
   ],

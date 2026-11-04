@@ -1,6 +1,6 @@
 /**
  * WebSocket room per case. Protocol shapes live in @midden/core (sync/protocol.ts).
- * Auth comes from the session cookie (same-origin upgrade); Origin is checked against the
+ * Auth comes from the session cookie (same-origin upgrade) or an API token; Origin is checked against the
  * configured public origin, or the request Host when none is configured.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -8,18 +8,18 @@ import type { WebSocket } from 'ws';
 import {
   ClientMessageSchema,
   SNAPSHOT_GAP,
-  type Actor,
   type ClientMessage,
   type PresenceEntry,
   type ServerMessage,
 } from '@midden/core';
+import { actorOf } from '../app.js';
 import { caseAccess } from '../auth/permissions.js';
 import { newId, nowIso } from '../lib/ids.js';
 import type { CaseRuntime } from '../cases/runtime.js';
 
 const presenceByCase = new Map<string, Map<string, PresenceEntry>>();
 
-function originOk(app: FastifyInstance, req: FastifyRequest): boolean {
+export function originOk(app: FastifyInstance, req: FastifyRequest): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser clients (tests, CLI)
   if (app.cfg.publicOrigin) return origin === app.cfg.publicOrigin;
@@ -43,7 +43,8 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
       return;
     }
     const user = req.user;
-    const actor: Actor = { id: user.id, name: user.displayName };
+    const opActor = actorOf(req);
+    const actor = { id: opActor.id, name: opActor.name };
     const clientId = newId('c');
     let rt: CaseRuntime | null = null;
     let canEdit = false;
@@ -91,7 +92,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             send({ t: 'error', message: 'No such case' });
             return;
           }
-          canEdit = access.edit;
+          canEdit = access.edit && req.token?.scope !== 'read';
           rt = app.runtimes.get(row.id);
           rt.clients.set(clientId, {
             id: clientId,
@@ -117,7 +118,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
             });
             return;
           }
-          const r = rt.appendOp(actor, msg.op, {
+          const r = rt.appendOp(opActor, msg.op, {
             clientOpId: msg.clientOpId,
             baseSeq: msg.baseSeq,
             canEdit,
