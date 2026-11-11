@@ -40,3 +40,6 @@ export * from './views/graph.js';
 export * from './report/report.js';
 export * from './terrain/aggregate.js';
 export * from './terrain/maplayout.js';
+export * from './tasks/tasks.js';
+export * from './tasks/template.js';
+export * from './tasks/notify.js';

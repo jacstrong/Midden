@@ -6,7 +6,16 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 import { addUser, as, login, testApp } from '../test/helpers.js';
 import { PROTOCOL_VERSIONS } from './routes.js';
 
-const WRITE_TOOLS = ['add_event', 'add_host', 'revert_change', 'update_event', 'update_host'];
+const WRITE_TOOLS = [
+  'add_event',
+  'add_host',
+  'add_task',
+  'comment_on_task',
+  'revert_change',
+  'update_event',
+  'update_host',
+  'update_task',
+];
 
 describe('the MCP endpoint', () => {
   let app: FastifyInstance;
@@ -167,6 +176,31 @@ describe('the MCP endpoint', () => {
     expect((await call(agent, 'get_case', { caseId })).data.summary).toBe('Suspected beacon');
     expect((await call(agent, 'list_scans', { caseId })).data.scans).toEqual([]);
     expect((await call(agent, 'list_attachments', { caseId })).data.attachments).toEqual([]);
+  });
+
+  it('works the task board: add, move, comment, and list what is mine', async () => {
+    const agent = await connect(await mint(ann, 'hunt-bot', 'write'));
+    const me = (await app.inject({ method: 'GET', url: '/api/auth/me', ...as(ann) })).json().user
+      .id as string;
+    const added = await call(agent, 'add_task', {
+      caseId,
+      task: { title: 'Sweep DCs for DCSync', assignees: [me], checklist: ['Pull 4662'] },
+    });
+    expect(added.isError).toBe(false);
+    const { taskId } = added.data;
+    await call(agent, 'update_task', {
+      caseId,
+      taskId,
+      patch: { status: 'done', outcome: 'Clean' },
+    });
+    await call(agent, 'comment_on_task', { caseId, taskId, text: 'Checked DC01 and DC02' });
+    const got = (await call(agent, 'get_task', { caseId, taskId })).data;
+    expect(got.task).toMatchObject({ status: 'done', outcome: 'Clean', assigneeNames: ['ANN'] });
+    expect(got.task.completedAt).toBeTruthy();
+    expect(got.task.checklist[0]).toMatchObject({ text: 'Pull 4662', done: false });
+    expect(got.comments.map((c: { text: string }) => c.text)).toEqual(['Checked DC01 and DC02']);
+    expect((await call(agent, 'list_tasks', { caseId, assignee: 'me' })).data.total).toBe(1);
+    expect((await call(agent, 'list_tasks', { caseId, status: 'todo' })).data.total).toBe(0);
   });
 
   it('turns bad input and API refusals into tool errors, not crashes', async () => {

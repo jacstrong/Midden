@@ -15,10 +15,18 @@ import {
   HostPatchSchema,
   HostSchema,
   SeveritySchema,
+  TaskFieldsSchema,
+  TaskPatchSchema,
+  TaskSchema,
+  TaskStatusSchema,
+  bottomRank,
+  commentsFor,
+  statusPatch,
   type CaseState,
   type Event,
   type Host,
   type Op,
+  type Task,
 } from '@midden/core';
 import { newId } from '../lib/ids.js';
 
@@ -147,6 +155,55 @@ const AddHost = z.object({
   ...idempotency,
 });
 
+const ListTasks = z.object({
+  caseId,
+  status: TaskStatusSchema.optional().describe('Only tasks in this column.'),
+  assignee: z
+    .string()
+    .optional()
+    .describe('Only tasks assigned to this user id. Pass "me" for the token owner.'),
+  query: z.string().optional().describe('Text to find in the title, description or outcome.'),
+  limit,
+  offset,
+});
+
+const AddTask = z.object({
+  caseId,
+  task: TaskFieldsSchema.pick({
+    description: true,
+    status: true,
+    priority: true,
+    assignees: true,
+    hostIds: true,
+    eventIds: true,
+    technique: true,
+    tags: true,
+    due: true,
+  })
+    .partial()
+    .extend({
+      title: z.string().min(1).describe('What needs doing, in a line.'),
+      checklist: z.array(z.string()).optional().describe('Steps, as plain text, all unticked.'),
+    }),
+  ...idempotency,
+});
+
+interface Person {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+async function people(api: CallApi, id: string): Promise<Map<string, Person>> {
+  const r = (await api('GET', `${caseUrl(id)}/people`)) as { people: Person[] };
+  return new Map(r.people.map((p) => [p.id, p]));
+}
+
+const withNames = (t: Task, who: Map<string, Person>) => ({
+  ...t,
+  assigneeNames: t.assignees.map((a) => who.get(a)?.displayName ?? a),
+});
+
 export const TOOLS: Tool[] = [
   define({
     name: 'list_cases',
@@ -272,6 +329,48 @@ export const TOOLS: Tool[] = [
   }),
 
   define({
+    name: 'list_tasks',
+    title: 'List tasks',
+    description: `The hunt's task board, with filters. Assignees are user ids; \`assigneeNames\` has their names. ${UNTRUSTED}`,
+    input: ListTasks,
+    run: async (api, a) => {
+      const [{ seq, state }, who, me] = await Promise.all([
+        loadState(api, a.caseId),
+        people(api, a.caseId),
+        a.assignee === 'me'
+          ? (api('GET', '/api/auth/me') as Promise<{ user: { id: string } }>)
+          : Promise.resolve(null),
+      ]);
+      const assignee = a.assignee === 'me' ? me?.user.id : a.assignee;
+      const tasks = Object.values(state.tasks)
+        .filter(
+          (t) =>
+            (!a.status || t.status === a.status) &&
+            (!assignee || t.assignees.includes(assignee)) &&
+            contains(a.query, [t.title, t.description, t.outcome, t.tags]),
+        )
+        .sort((x, y) => x.rank - y.rank)
+        .map((t) => withNames(t, who));
+      return { seq, ...page(tasks, a.offset, a.limit) };
+    },
+  }),
+  define({
+    name: 'get_task',
+    title: 'Get a task',
+    description: `One task in full, with its comments. ${UNTRUSTED}`,
+    input: z.object({ caseId, taskId: z.string().min(1) }),
+    run: async (api, a) => {
+      const [{ seq, state }, who] = await Promise.all([
+        loadState(api, a.caseId),
+        people(api, a.caseId),
+      ]);
+      const task = state.tasks[a.taskId];
+      if (!task) throw new ToolError(`No task ${a.taskId} in this case`);
+      return { seq, task: withNames(task, who), comments: commentsFor(state, task.id) };
+    },
+  }),
+
+  define({
     name: 'add_event',
     title: 'Add an event',
     write: true,
@@ -328,6 +427,90 @@ export const TOOLS: Tool[] = [
       ...idempotency,
     }),
     run: (api, a) => submit(api, a.caseId, { type: 'host.set', id: a.hostId, patch: a.patch }, a),
+  }),
+  define({
+    name: 'add_task',
+    title: 'Add a task',
+    write: true,
+    description:
+      'Add a task to the board. Assignees are user ids from get_case members. Everyone assigned is notified. It is recorded in the history under this token, and can be reverted.',
+    input: AddTask,
+    run: async (api, a) => {
+      const [{ state }, me] = await Promise.all([
+        loadState(api, a.caseId),
+        api('GET', '/api/auth/me') as Promise<{ user: { id: string; displayName: string } }>,
+      ]);
+      const status = a.task.status ?? 'todo';
+      const now = new Date().toISOString();
+      const task = TaskSchema.parse({
+        ...a.task,
+        id: newId('task'),
+        status,
+        checklist: (a.task.checklist ?? []).map((text) => ({ id: newId('ck'), text, done: false })),
+        rank: bottomRank(state, status),
+        createdBy: me.user.id,
+        createdByName: me.user.displayName,
+        createdAt: now,
+        completedAt: status === 'done' ? now : '',
+      });
+      return submit(api, a.caseId, { type: 'task.add', task }, a).then((r) => ({
+        ...(r as object),
+        taskId: task.id,
+      }));
+    },
+  }),
+  define({
+    name: 'update_task',
+    title: 'Update a task',
+    write: true,
+    description:
+      'Change fields on a task, such as moving it to another column or recording its outcome. Send only the fields to change. Its assignees and followers are notified.',
+    input: z.object({
+      caseId,
+      taskId: z.string().min(1),
+      patch: TaskPatchSchema.omit({ createdBy: true, createdByName: true, createdAt: true }),
+      ...idempotency,
+    }),
+    run: async (api, a) => {
+      const { state } = await loadState(api, a.caseId);
+      const t = state.tasks[a.taskId];
+      if (!t) throw new ToolError(`No task ${a.taskId} in this case`);
+      const now = new Date().toISOString();
+      const patch = { ...a.patch, ...(a.patch.status ? statusPatch(t, a.patch.status, now) : {}) };
+      if (a.patch.status && a.patch.status !== t.status && a.patch.rank === undefined)
+        patch.rank = bottomRank(state, a.patch.status);
+      return submit(api, a.caseId, { type: 'task.set', id: a.taskId, patch }, a);
+    },
+  }),
+  define({
+    name: 'comment_on_task',
+    title: 'Comment on a task',
+    write: true,
+    description:
+      "Add a comment to a task, such as progress or a finding. Its assignees and followers are notified. It is recorded under this token's name.",
+    input: z.object({
+      caseId,
+      taskId: z.string().min(1),
+      text: z.string().min(1).max(20_000),
+      ...idempotency,
+    }),
+    run: async (api, a) => {
+      const me = (await api('GET', '/api/auth/me')) as {
+        user: { id: string; displayName: string };
+      };
+      const comment = {
+        id: newId('cm'),
+        taskId: a.taskId,
+        authorId: me.user.id,
+        authorName: me.user.displayName,
+        ts: new Date().toISOString(),
+        text: a.text,
+      };
+      return submit(api, a.caseId, { type: 'comment.add', comment }, a).then((r) => ({
+        ...(r as object),
+        commentId: comment.id,
+      }));
+    },
   }),
   define({
     name: 'revert_change',

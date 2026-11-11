@@ -7,6 +7,7 @@ const TABS: Array<[CaseView, string]> = [
   ['graph', 'Branch graph'],
   ['timeline', 'Timeline'],
   ['hosts', 'Hosts'],
+  ['tasks', 'Tasks'],
   ['pivot', 'Indicators'],
   ['matrix', 'ATT&CK'],
   ['scans', 'Scans'],
@@ -26,10 +27,12 @@ export function Tabs() {
   const seq = useCaseStore((s) => s.seq);
   const current: CaseView = route.kind === 'case' && route.view === 'history' ? 'history' : view;
   const scans = useCaseStore((s) => s.state.scans);
+  const tasks = useCaseStore((s) => s.state.tasks);
   const counts: Partial<Record<CaseView, number>> = {
     scans: Object.keys(scans).length,
     timeline: filtered.length,
     hosts: Object.keys(hosts).length,
+    tasks: Object.values(tasks).filter((t) => t.status !== 'done').length,
     pivot: iocs.length,
     history: seq,
   };

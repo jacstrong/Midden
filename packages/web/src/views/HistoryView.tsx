@@ -10,6 +10,7 @@ function describe(op: Op, state: ReturnType<typeof useCaseStore.getState>['state
   const eventName = (id: string): string =>
     state.events[id]?.activity || state.events[id]?.indicator || id;
   const attachmentName = (id: string): string => state.attachments[id]?.name ?? id;
+  const taskName = (id: string): string => (state.tasks[id]?.title ?? id).slice(0, 50);
   switch (op.type) {
     case 'case.set':
       return `Case details: ${definedKeys(op.patch).join(', ')}`;
@@ -41,6 +42,18 @@ function describe(op: Op, state: ReturnType<typeof useCaseStore.getState>['state
       return `Attachment ${attachmentName(op.id)}: ${definedKeys(op.patch).join(', ')}`;
     case 'attachment.remove':
       return `Removed attachment ${op.id}`;
+    case 'task.add':
+      return `Added task "${op.task.title.slice(0, 60)}"`;
+    case 'task.set':
+      return `Task "${taskName(op.id)}": ${definedKeys(op.patch).join(', ')}`;
+    case 'task.remove':
+      return `Removed task "${taskName(op.id)}"`;
+    case 'comment.add':
+      return `Comment on "${taskName(op.comment.taskId)}"`;
+    case 'comment.set':
+      return `Edited a comment`;
+    case 'comment.remove':
+      return `Removed a comment`;
     case 'batch':
       return `Batch of ${op.ops.length}: ${[...new Set(op.ops.map((o) => o.type))].join(', ')}`;
     case 'op.revert':
@@ -56,7 +69,9 @@ function values(op: Op): Record<string, unknown> | null {
     op.type === 'event.set' ||
     op.type === 'case.set' ||
     op.type === 'scan.set' ||
-    op.type === 'attachment.set'
+    op.type === 'attachment.set' ||
+    op.type === 'task.set' ||
+    op.type === 'comment.set'
   )
     return op.patch as Record<string, unknown>;
   return null;

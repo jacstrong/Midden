@@ -35,6 +35,40 @@ test.describe('standalone single-file build', () => {
     expect(external).toEqual([]);
   });
 
+  test('plans work on the task board and exports it', async ({ page }) => {
+    await open(page);
+    await page.getByTestId('load-demo').click();
+    await page.getByTestId('tab-tasks').click();
+    await expect(page.getByTestId('task-card')).toHaveCount(6);
+    await page.getByTestId('task-scope-unassigned').click();
+    await expect(page.getByTestId('task-card')).toHaveCount(2);
+    await page.getByTestId('task-scope-all').click();
+
+    await page.getByTestId('task-add').click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Title').fill('Pull proxy logs for every server');
+    await dlg.locator('#tAssign').fill('J. Meyer');
+    await dlg.locator('#tAssign').press('Enter');
+    await page.getByTestId('task-save').click();
+    await expect(page.getByTestId('task-card')).toHaveCount(7);
+    await page.getByTestId('task-search').fill('meyer');
+    await expect(page.getByTestId('task-card')).toHaveCount(1);
+    await page.getByTestId('task-search').fill('');
+
+    await page.getByTestId('task-export').click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('task-export-csv').click(),
+    ]);
+    const csv = await download.createReadStream().then(async (s) => {
+      let out = '';
+      for await (const chunk of s) out += chunk;
+      return out;
+    });
+    expect(csv.split('\n')[0]).toContain('title,description,status');
+    expect(csv).toContain('Pull proxy logs for every server');
+  });
+
   test('loads the example case and renders every view', async ({ page }) => {
     await open(page);
     await page.getByTestId('load-demo').click();

@@ -125,6 +125,59 @@ export interface AttachmentMeta {
 }
 export type AttachmentFields = Omit<AttachmentMeta, 'id'>;
 
+/** Kanban columns, in board order. */
+export type TaskStatus = 'backlog' | 'todo' | 'doing' | 'blocked' | 'review' | 'done';
+export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/**
+ * A piece of hunt work: "Sweep the DCs for DCSync", "Image WKS-FIN-014". Every field is always
+ * present, as on hosts and events, so an inverse patch can always put a field back.
+ */
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  /** User ids when hosted. The standalone build has no accounts, so there they are names. */
+  assignees: string[];
+  hostIds: string[];
+  eventIds: string[];
+  /** ATT&CK technique the task hunts for, e.g. T1003.006. Empty when it is not hypothesis-driven. */
+  technique: string;
+  tags: string[];
+  /** ISO-8601 UTC instant, or empty. */
+  due: string;
+  checklist: ChecklistItem[];
+  /** What the work found, filled in when it is done: "Nothing on the DCs", "Found a second implant". */
+  outcome: string;
+  /** Position within its column. Fractional, so moving a card rewrites only that card. */
+  rank: number;
+  createdBy: string;
+  /** Display name at creation, so the card reads without a user lookup (and in standalone). */
+  createdByName: string;
+  createdAt: string;
+  /** When the task last moved into done; empty while it is open. */
+  completedAt: string;
+}
+
+/** A note on a task: progress, a question for the lead, a handover. */
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  authorName: string;
+  /** ISO-8601 UTC. */
+  ts: string;
+  text: string;
+}
+
 export interface CaseState {
   case: CaseMeta;
   hosts: Record<string, Host>;
@@ -133,6 +186,8 @@ export interface CaseState {
   /** Keyed by `linkKey(hostId, ip)`. */
   links: Record<string, Link>;
   attachments: Record<string, AttachmentMeta>;
+  tasks: Record<string, Task>;
+  comments: Record<string, TaskComment>;
 }
 
 export const linkKey = (hostId: string, ip: string): string => `${hostId}|${ip}`;
@@ -141,3 +196,5 @@ export const linkKey = (hostId: string, ip: string): string => `${hostId}|${ip}`
 export type HostFields = Omit<Host, 'id'>;
 export type EventFields = Omit<Event, 'id'>;
 export type ScanFields = Omit<ScanMeta, 'id'>;
+export type TaskFields = Omit<Task, 'id'>;
+export type CommentFields = Omit<TaskComment, 'id'>;

@@ -26,6 +26,7 @@ import {
 import { Modal } from './Modal';
 import { Datalist, Field, Fieldset } from './fields';
 import { Attachments } from './Attachments';
+import { LinkedTasks } from '../tasks/LinkedTasks';
 import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore } from '../store/useUiStore';
 import { toast } from '../store/useToasts';
@@ -571,6 +572,13 @@ export function EventEditor({ id, draft }: EventEditorProps) {
         </div>
       </Fieldset>
       {!isNew && <Attachments targetKind="event" targetId={original.id} />}
+      {!isNew && (
+        <LinkedTasks
+          targetKind="event"
+          targetId={original.id}
+          hostId={original.hostId || undefined}
+        />
+      )}
       {touches && Object.keys(touches).length > 0 && (
         <div className="changed-note" data-testid="remote-changed">
           {[...new Set(Object.values(touches).map((t) => t.by.name))].join(', ')} changed{' '}

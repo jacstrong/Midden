@@ -11,6 +11,7 @@ import {
 import { Modal } from './Modal';
 import { Field } from './fields';
 import { Attachments } from './Attachments';
+import { LinkedTasks } from '../tasks/LinkedTasks';
 import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore, type ModalState } from '../store/useUiStore';
 import { toast } from '../store/useToasts';
@@ -151,6 +152,7 @@ export function HostEditor({ id, after, returnTo }: HostEditorProps) {
       }
     >
       {!isNew && <Attachments targetKind="host" targetId={original.id} />}
+      {!isNew && <LinkedTasks targetKind="host" targetId={original.id} />}
       {touches && Object.keys(touches).length > 0 && (
         <div className="changed-note" data-testid="remote-changed">
           {[...new Set(Object.values(touches).map((t) => t.by.name))].join(', ')} changed{' '}

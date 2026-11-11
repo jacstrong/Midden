@@ -14,6 +14,10 @@ import type {
   HostFields,
   ScanFields,
   ScanMeta,
+  Task,
+  TaskComment,
+  TaskFields,
+  CommentFields,
 } from '../domain/types.js';
 import {
   AttachmentMetaSchema,
@@ -26,6 +30,10 @@ import {
   ScanMetaSchema,
   ScanPatchSchema,
   AttachmentPatchSchema,
+  CommentPatchSchema,
+  TaskCommentSchema,
+  TaskPatchSchema,
+  TaskSchema,
 } from '../domain/schemas.js';
 
 export const MAX_BATCH = 5000;
@@ -49,6 +57,12 @@ export type Op =
   | { type: 'attachment.add'; att: AttachmentMeta }
   | { type: 'attachment.set'; id: string; patch: Patch<AttachmentFields> }
   | { type: 'attachment.remove'; id: string }
+  | { type: 'task.add'; task: Task }
+  | { type: 'task.set'; id: string; patch: Patch<TaskFields> }
+  | { type: 'task.remove'; id: string }
+  | { type: 'comment.add'; comment: TaskComment }
+  | { type: 'comment.set'; id: string; patch: Patch<CommentFields> }
+  | { type: 'comment.remove'; id: string }
   | { type: 'batch'; ops: Op[] }
   | { type: 'op.revert'; targetSeq: number; inverse: Op };
 
@@ -78,6 +92,12 @@ export const OpSchema: z.ZodType<Op> = z.lazy(() =>
     z.object({ type: z.literal('attachment.add'), att: AttachmentMetaSchema }),
     z.object({ type: z.literal('attachment.set'), id, patch: AttachmentPatchSchema }),
     z.object({ type: z.literal('attachment.remove'), id }),
+    z.object({ type: z.literal('task.add'), task: TaskSchema }),
+    z.object({ type: z.literal('task.set'), id, patch: TaskPatchSchema }),
+    z.object({ type: z.literal('task.remove'), id }),
+    z.object({ type: z.literal('comment.add'), comment: TaskCommentSchema }),
+    z.object({ type: z.literal('comment.set'), id, patch: CommentPatchSchema }),
+    z.object({ type: z.literal('comment.remove'), id }),
     z.object({ type: z.literal('batch'), ops: z.array(OpSchema) }),
     z.object({
       type: z.literal('op.revert'),
@@ -111,7 +131,13 @@ export function touchedFields(op: Op): string[] {
     case 'scan.set':
       return definedKeys(op.patch).map((k) => `${op.id}/${k}`);
     case 'attachment.set':
+    case 'task.set':
+    case 'comment.set':
       return definedKeys(op.patch).map((k) => `${op.id}/${k}`);
+    case 'task.add':
+      return [`${op.task.id}/*`];
+    case 'comment.add':
+      return [`${op.comment.id}/*`];
     case 'host.add':
       return [`${op.host.id}/*`];
     case 'event.add':
@@ -124,6 +150,8 @@ export function touchedFields(op: Op): string[] {
     case 'event.remove':
     case 'scan.remove':
     case 'attachment.remove':
+    case 'task.remove':
+    case 'comment.remove':
       return [`${op.id}/*`];
     case 'link.set':
     case 'link.remove':

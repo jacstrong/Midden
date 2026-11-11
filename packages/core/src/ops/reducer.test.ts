@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { apply, applyAll, emptyState, inverse } from './reducer.js';
 import { parseOp, opSize, touchedFields, type Op } from './ops.js';
-import type { AttachmentMeta, CaseState, Event, Host } from '../domain/types.js';
+import type { AttachmentMeta, CaseState, Event, Host, Task } from '../domain/types.js';
 
 const host = (id: string, extra: Partial<Host> = {}): Host => ({
   id,
@@ -166,7 +166,63 @@ const arbAttachment = arbId.map((id): AttachmentMeta => ({
   dangerous: false,
 }));
 
+const task = (id: string, extra: Partial<Task> = {}): Task => ({
+  id,
+  title: id,
+  description: '',
+  status: 'todo',
+  priority: 'normal',
+  assignees: [],
+  hostIds: [],
+  eventIds: [],
+  technique: '',
+  tags: [],
+  due: '',
+  checklist: [],
+  outcome: '',
+  rank: 0,
+  createdBy: '',
+  createdByName: '',
+  createdAt: '',
+  completedAt: '',
+  ...extra,
+});
+const arbTask = arbId.chain((id) =>
+  fc
+    .record({
+      title: arbStr,
+      status: fc.constantFrom('todo', 'doing', 'done'),
+      assignees: fc.array(fc.constantFrom('u1', 'u2'), { maxLength: 2 }),
+      rank: fc.integer({ min: -5, max: 5 }),
+    })
+    .map((f) => task(id, f as Partial<Task>)),
+);
+const arbTaskPatch = fc.record(
+  {
+    title: arbStr,
+    status: fc.constantFrom('todo', 'doing', 'blocked', 'done'),
+    assignees: fc.array(fc.constantFrom('u1', 'u2', 'u3'), { maxLength: 3 }),
+    rank: fc.integer({ min: -10, max: 10 }),
+    checklist: fc.array(
+      fc.record({ id: fc.constantFrom('k1', 'k2'), text: arbStr, done: fc.boolean() }),
+      { maxLength: 2 },
+    ),
+  },
+  { requiredKeys: [] },
+);
+
 const arbLeafOp: fc.Arbitrary<Op> = fc.oneof(
+  arbTask.map((t): Op => ({ type: 'task.add', task: t })),
+  fc
+    .tuple(arbId, arbTaskPatch)
+    .map(([id, patch]): Op => ({ type: 'task.set', id, patch: patch as Partial<Task> })),
+  arbId.map((id): Op => ({ type: 'task.remove', id })),
+  fc.tuple(arbId, arbId, arbStr).map(([id, taskId, text]): Op => ({
+    type: 'comment.add',
+    comment: { id, taskId, authorId: 'u1', authorName: 'Ann', ts: '2026-07-14T13:00:00Z', text },
+  })),
+  fc.tuple(arbId, arbStr).map(([id, text]): Op => ({ type: 'comment.set', id, patch: { text } })),
+  arbId.map((id): Op => ({ type: 'comment.remove', id })),
   fc.constant<Op>({ type: 'noop' }),
   arbAttachment.map((att): Op => ({ type: 'attachment.add', att })),
   fc

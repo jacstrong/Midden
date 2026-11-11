@@ -7,10 +7,20 @@ import {
   type ParsedCaseFile,
   type Event,
   type Host,
+  type Task,
 } from '@midden/core';
 
 export type ViewId =
-  'graph' | 'timeline' | 'hosts' | 'pivot' | 'matrix' | 'scans' | 'map' | 'builder' | 'report';
+  | 'graph'
+  | 'timeline'
+  | 'hosts'
+  | 'pivot'
+  | 'matrix'
+  | 'scans'
+  | 'map'
+  | 'builder'
+  | 'report'
+  | 'tasks';
 export const VIEW_IDS: ViewId[] = [
   'graph',
   'timeline',
@@ -21,6 +31,7 @@ export const VIEW_IDS: ViewId[] = [
   'map',
   'builder',
   'report',
+  'tasks',
 ];
 
 export type ModalState =
@@ -32,6 +43,15 @@ export type ModalState =
       after?: ((id: string) => void) | undefined;
       returnTo?: ModalState | undefined;
     }
+  | {
+      kind: 'task';
+      id: string | null;
+      draft?: Partial<Task> | undefined;
+      returnTo?: ModalState | undefined;
+    }
+  | { kind: 'task-bulk'; ids: string[] }
+  | { kind: 'task-import' }
+  | { kind: 'task-copy'; ids: string[] }
   | { kind: 'case' }
   | { kind: 'menu' }
   | {

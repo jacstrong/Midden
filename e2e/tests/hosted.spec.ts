@@ -388,6 +388,74 @@ test.describe('hosted collaboration', () => {
     await bob.context().close();
   });
 
+  test('a lead assigns hunt tasks, the analyst is notified live, and the board updates for both', async ({
+    browser,
+  }) => {
+    const ann = await userPage(browser, 'ann', 'ann-password-123');
+    const bob = await userPage(browser, 'bob', 'bob-password-123');
+
+    await ann.locator('#ncName').fill('Hunt Board');
+    await ann.getByRole('button', { name: 'Create' }).click();
+    await expect(ann).toHaveURL(/#\/c\/case_[^/]+\/graph$/);
+    const boardUrl = ann.url().replace(/\/graph$/, '/tasks');
+    await ann.goto(boardUrl);
+    await bob.goto(boardUrl);
+    await expect(bob.getByTestId('task-add-empty')).toBeVisible();
+
+    // ann plans a task for bob
+    await ann.getByTestId('task-add-empty').click();
+    const dlg = ann.getByRole('dialog');
+    await dlg.getByLabel('Title').fill('Sweep the DCs for DCSync');
+    await dlg.locator('#tAssign').selectOption({ label: 'bob' });
+    await dlg.getByLabel('New checklist item').fill('Pull 4662 events');
+    await dlg.getByLabel('New checklist item').press('Enter');
+    await ann.getByTestId('task-save').click();
+
+    // bob sees the card appear and hears about it without reloading
+    await expect(bob.getByTestId('task-col-todo').getByTestId('task-card')).toHaveCount(1);
+    await expect(bob.getByTestId('bell-count')).toHaveText('1');
+    await bob.getByTestId('task-scope-mine').click();
+    await expect(bob.getByTestId('task-card')).toHaveCount(1);
+
+    // ann follows it; bob opens it from the notice and finishes it
+    await ann.getByTestId('task-card').click();
+    await ann.getByTestId('task-follow').click();
+    await expect(ann.getByTestId('task-follow')).toHaveText(/Following/);
+    await ann.keyboard.press('Escape');
+
+    await bob.getByTestId('bell').click();
+    await bob.getByTestId('bell-item').first().click();
+    const bd = bob.getByRole('dialog', { name: 'Edit task' });
+    await bd.getByLabel('Done: Pull 4662 events').check();
+    await bd.getByLabel('Status').selectOption('done');
+    await bd.getByLabel('Outcome').fill('Nothing on DC01-03');
+    await bob.getByTestId('task-save').click();
+
+    await expect(ann.getByTestId('task-col-done').getByTestId('task-card')).toContainText(
+      'Nothing on DC01-03',
+    );
+    await expect(ann.getByTestId('bell-count')).toHaveText('1');
+
+    // ann loads the rest of the opening moves from a spreadsheet, assigned to bob
+    await ann.getByTestId('task-import').click();
+    await ann.getByTestId('task-import-file').setInputFiles({
+      name: 'opening.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        'title,assignees,priority,checklist\nImage FS01,bob,high,Memory; Disk\nReview proxy logs,bob,normal,\nCollect VPN logs,nobody,low,\n',
+      ),
+    });
+    await expect(ann.getByTestId('task-import-unresolved-users')).toContainText('nobody');
+    await ann.getByTestId('task-import-run').click();
+    await expect(ann.getByTestId('task-card')).toHaveCount(4);
+    await expect(ann.getByTestId('task-bulkbar')).toContainText('3 selected');
+
+    // and moves them all to In progress in one step
+    await ann.getByTestId('bulk-move').selectOption('doing');
+    await expect(ann.getByTestId('task-col-doing').getByTestId('task-card')).toHaveCount(3);
+    await expect(bob.getByTestId('task-col-doing').getByTestId('task-card')).toHaveCount(2);
+  });
+
   test('going offline blocks edits and reconnecting catches up on missed changes', async ({
     browser,
   }) => {

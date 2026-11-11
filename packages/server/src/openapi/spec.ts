@@ -12,6 +12,8 @@ import {
   HostSchema,
   OpSchema,
   ScanMetaSchema,
+  TaskCommentSchema,
+  TaskSchema,
 } from '@midden/core';
 import { CreateTokenBody } from '../auth/tokenRoutes.js';
 import { tokenMayUse } from '../auth/tokens.js';
@@ -25,6 +27,7 @@ import {
   SubmitOp,
 } from '../cases/routes.js';
 import { HostsQuery, MapQuery } from '../terrain/routes.js';
+import { MarkRead, NotificationsQuery } from '../tasks/routes.js';
 
 /** The version of the API contract, which is independent of the product's release number. */
 export const API_VERSION = '1.0.0';
@@ -112,8 +115,33 @@ const named = {
     openCount: z.number().int(),
     ports: z.array(z.looseObject({ port: z.number().int(), proto: z.string(), name: z.string() })),
   }),
+  Notification: z.object({
+    id: z.string(),
+    caseId: z.string(),
+    caseName: z.string(),
+    taskId: z
+      .string()
+      .nullable()
+      .meta({ description: 'Null when the notice sums up a change to several tasks.' }),
+    seq: z.number().int().meta({ description: 'The operation that caused it.' }),
+    kind: z.enum([
+      'assigned',
+      'unassigned',
+      'status',
+      'updated',
+      'commented',
+      'deleted',
+      'summary',
+    ]),
+    actor: z.object({ id: z.string(), name: z.string() }),
+    text: z.string().meta({ description: 'What happened, to follow the actor name.' }),
+    createdAt: z.string(),
+    readAt: z.string().nullable(),
+  }),
   Op: OpSchema,
   CaseState: CaseStateSchema,
+  Task: TaskSchema,
+  TaskComment: TaskCommentSchema,
   Event: EventSchema,
   Host: HostSchema,
   ScanMeta: ScanMetaSchema,
@@ -129,12 +157,23 @@ const named = {
   CreateUser,
   PatchUser,
   CreateToken: CreateTokenBody,
+  MarkRead,
 };
 
 /** Response schemas, exported so the tests can hold real responses to them. */
 export const responseSchemas = named;
 
-type Tag = 'Meta' | 'Auth' | 'Tokens' | 'Users' | 'Admin' | 'Cases' | 'History' | 'Scans' | 'Files';
+type Tag =
+  | 'Meta'
+  | 'Auth'
+  | 'Tokens'
+  | 'Users'
+  | 'Admin'
+  | 'Cases'
+  | 'History'
+  | 'Tasks'
+  | 'Scans'
+  | 'Files';
 
 interface RouteDoc {
   method: 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -487,6 +526,71 @@ const routes: RouteDoc[] = [
 
   {
     method: 'get',
+    path: `${CASE}/people`,
+    tag: 'Tasks',
+    summary: 'The people who can be assigned tasks in a case',
+    description:
+      'Everyone with an enabled account who can read the case. `canEdit` says whether they can also move their own cards.',
+    response: z.object({
+      people: z.array(
+        z.object({
+          id: z.string(),
+          username: z.string(),
+          displayName: z.string(),
+          canEdit: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  {
+    method: 'get',
+    path: `${CASE}/follows`,
+    tag: 'Tasks',
+    summary: 'Who follows which task',
+    response: z.object({
+      follows: z.array(z.object({ taskId: z.string(), userId: z.string() })),
+    }),
+  },
+  {
+    method: 'put',
+    path: `${CASE}/tasks/{taskId}/follow`,
+    tag: 'Tasks',
+    summary: 'Follow a task',
+    description:
+      'Followers are notified of every change to the task, as its assignees are. Read access is enough, so a viewer can follow work too.',
+    response: ref('Ok'),
+  },
+  {
+    method: 'delete',
+    path: `${CASE}/tasks/{taskId}/follow`,
+    tag: 'Tasks',
+    summary: 'Stop following a task',
+    response: ref('Ok'),
+  },
+  {
+    method: 'get',
+    path: '/api/notifications',
+    tag: 'Tasks',
+    summary: 'Your notices about tasks, newest first',
+    description:
+      'Notices also arrive live over the WebSocket as `{"t":"notify"}` messages. Notices from cases you can no longer read are left out.',
+    query: NotificationsQuery,
+    response: z.object({
+      notifications: z.array(ref('Notification')),
+      unread: z.number().int(),
+    }),
+  },
+  {
+    method: 'post',
+    path: '/api/notifications/read',
+    tag: 'Tasks',
+    summary: 'Mark notices as read',
+    body: 'MarkRead',
+    response: z.object({ ok: z.literal(true), unread: z.number().int() }),
+  },
+
+  {
+    method: 'get',
     path: `${CASE}/scans`,
     tag: 'Scans',
     summary: 'List scans',
@@ -759,6 +863,11 @@ export function openApiDocument(): Json {
       { name: 'Admin', description: 'Server administration.' },
       { name: 'Cases', description: 'Investigations.' },
       { name: 'History', description: 'The operation log: how a case changes.' },
+      {
+        name: 'Tasks',
+        description:
+          'Who can be assigned work, who follows it, and notices. Tasks themselves are changed with `task.*` and `comment.*` operations.',
+      },
       { name: 'Scans', description: 'Uploaded nmap scans and the terrain they map.' },
       { name: 'Files', description: 'Evidence attached to events and hosts.' },
     ],

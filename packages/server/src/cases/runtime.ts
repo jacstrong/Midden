@@ -7,6 +7,7 @@ import {
   apply,
   applyAll,
   emptyState,
+  normalizeState,
   inverse,
   opSize,
   parseOp,
@@ -42,6 +43,17 @@ export type AppendResult =
   | { ok: true; seq: number; broadcast: Broadcast; overwrote: Overwrite[]; duplicate: boolean }
   | { ok: false; code: RejectCode; message: string };
 
+/** Called after an op is committed, with the states either side of it. Must not throw. */
+export type CommitHook = (e: {
+  caseId: string;
+  seq: number;
+  ts: string;
+  actor: Actor;
+  prev: CaseState;
+  op: Op;
+  next: CaseState;
+}) => void;
+
 export interface RoomClient {
   id: string;
   user: Actor;
@@ -58,6 +70,7 @@ export class CaseRuntime {
   constructor(
     readonly db: Db,
     readonly caseId: string,
+    private readonly onCommit?: CommitHook | undefined,
   ) {
     const loaded = loadState(db, caseId);
     this.state = loaded.state;
@@ -184,9 +197,15 @@ export class CaseRuntime {
       }
       return s;
     });
+    const prev = this.state;
     this.state = next;
     this.seq = seq;
     this.touch(op, seq, actor);
+    try {
+      this.onCommit?.({ caseId: this.caseId, seq, ts, actor, prev, op, next });
+    } catch {
+      // A failed notice must never undo or fail a change that is already committed.
+    }
     const broadcast: Broadcast = { seq, op, actor, ts, clientOpId: opts.clientOpId };
     return { ok: true, seq, broadcast, overwrote, duplicate: false };
   }
@@ -249,6 +268,14 @@ function missingTarget(state: CaseState, op: Op): string | null {
       return state.scans[op.id] ? null : `Scan ${op.id} does not exist`;
     case 'attachment.remove':
       return state.attachments[op.id] ? null : `Attachment ${op.id} does not exist`;
+    case 'task.set':
+    case 'task.remove':
+      return state.tasks[op.id] ? null : `Task ${op.id} does not exist`;
+    case 'comment.add':
+      return state.tasks[op.comment.taskId] ? null : `Task ${op.comment.taskId} does not exist`;
+    case 'comment.set':
+    case 'comment.remove':
+      return state.comments[op.id] ? null : `Comment ${op.id} does not exist`;
     case 'batch': {
       let s = state;
       for (const o of op.ops) {
@@ -273,7 +300,9 @@ export function loadState(db: Db, caseId: string): { state: CaseState; seq: numb
     'SELECT seq, state FROM case_snapshots WHERE case_id = ? ORDER BY seq DESC LIMIT 1',
     caseId,
   );
-  let state = snap ? (JSON.parse(snap.state) as CaseState) : emptyState(c.created_at);
+  let state = snap
+    ? normalizeState(JSON.parse(snap.state) as Partial<CaseState>, c.created_at)
+    : emptyState(c.created_at);
   const from = snap ? Number(snap.seq) : 0;
   const rows = db.all<{ payload: string }>(
     'SELECT payload FROM ops WHERE case_id = ? AND seq > ? ORDER BY seq',
@@ -293,12 +322,13 @@ export class RuntimeRegistry {
   constructor(
     private readonly db: Db,
     private readonly idleMs = 10 * 60_000,
+    private readonly onCommit?: CommitHook | undefined,
   ) {}
 
   get(caseId: string): CaseRuntime {
     let rt = this.runtimes.get(caseId);
     if (!rt) {
-      rt = new CaseRuntime(this.db, caseId);
+      rt = new CaseRuntime(this.db, caseId, this.onCommit);
       this.runtimes.set(caseId, rt);
     }
     rt.lastUsed = Date.now();

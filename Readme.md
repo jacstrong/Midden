@@ -32,6 +32,9 @@ Case files move freely between the two, and still open in the original prototype
   target list. Every command it can produce is checked against the real nmap binary in CI.
 - **Evidence.** Screenshots, log excerpts and small captures attach to events and hosts.
   Uploads are content-addressed and only recognised image formats are ever rendered inline.
+- **Tasks.** A kanban board for the hunt: assign work to one or more analysts, link it to hosts
+  and events, follow it, and hear when it changes. Leads can bulk assign, duplicate, copy, and
+  import or export task lists as JSON or CSV. See [docs/tasks.md](docs/tasks.md).
 - **Reports.** HTML, Markdown, timeline CSV and an indicator list, assembled from the case.
 - **History.** Every change is an operation with an actor and a time. The history view shows
   before and after, and anything can be reverted.

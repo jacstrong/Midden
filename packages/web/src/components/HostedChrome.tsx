@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useSession } from '../store/useSession';
 import { useRoute } from '../lib/router';
 import { Toasts } from './Toasts';
+import { NotificationBell } from './NotificationBell';
 
 /** Shell for non-case pages in hosted mode: brand, page title, nav, sign-out. */
 export function HostedChrome({ title, children }: { title: string; children: ReactNode }) {
@@ -21,6 +22,7 @@ export function HostedChrome({ title, children }: { title: string; children: Rea
         </div>
         <div className="caseband" />
         <div className="topact">
+          <NotificationBell />
           <button
             className="btn ghost"
             onClick={() => navigate({ kind: 'cases' })}

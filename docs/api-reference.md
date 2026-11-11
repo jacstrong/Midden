@@ -482,6 +482,98 @@ Appends a new operation that reverses the old one. Nothing is erased.
 | --- | --- | --- | --- |
 | `seq` | integer | yes |  |
 
+## Tasks
+
+Who can be assigned work, who follows it, and notices. Tasks themselves are changed with `task.*` and `comment.*` operations.
+
+### `GET /api/cases/{id}/people`
+
+The people who can be assigned tasks in a case.
+
+Everyone with an enabled account who can read the case. `canEdit` says whether they can also move their own cards.
+
+**Access:** Any API token, or a session.
+
+**200**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `people` | array of object | yes |  |
+
+### `GET /api/cases/{id}/follows`
+
+Who follows which task.
+
+**Access:** Any API token, or a session.
+
+**200**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `follows` | array of object | yes |  |
+
+### `PUT /api/cases/{id}/tasks/{taskId}/follow`
+
+Follow a task.
+
+Followers are notified of every change to the task, as its assignees are. Read access is enough, so a viewer can follow work too.
+
+**Access:** A write token, or a session.
+
+**200**
+
+[Ok](#ok)
+
+### `DELETE /api/cases/{id}/tasks/{taskId}/follow`
+
+Stop following a task.
+
+**Access:** A write token, or a session.
+
+**200**
+
+[Ok](#ok)
+
+### `GET /api/notifications`
+
+Your notices about tasks, newest first.
+
+Notices also arrive live over the WebSocket as `{"t":"notify"}` messages. Notices from cases you can no longer read are left out.
+
+**Access:** Any API token, or a session.
+
+**Query**
+
+| Name | Type | Notes |
+| --- | --- | --- |
+| `unread` | `1` |  |
+| `limit` | integer | Default `50`. |
+| `before` | string |  |
+
+**200**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `notifications` | array of [Notification](#notification) | yes |  |
+| `unread` | integer | yes |  |
+
+### `POST /api/notifications/read`
+
+Mark notices as read.
+
+**Access:** A write token, or a session.
+
+**Body** (`application/json`)
+
+[MarkRead](#markread)
+
+**200**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `ok` | `true` | yes |  |
+| `unread` | integer | yes |  |
+
 ## Scans
 
 Uploaded nmap scans and the terrain they map.
@@ -766,11 +858,26 @@ Delete an attachment.
 | `openCount` | integer | yes |  |
 | `ports` | array of map to anything | yes |  |
 
+### Notification
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+| `caseId` | string | yes |  |
+| `caseName` | string | yes |  |
+| `taskId` | string or null | yes | Null when the notice sums up a change to several tasks. |
+| `seq` | integer | yes | The operation that caused it. |
+| `kind` | `assigned`, `unassigned`, `status`, `updated`, `commented`, `deleted`, `summary` | yes |  |
+| `actor` | object | yes |  |
+| `text` | string | yes | What happened, to follow the actor name. |
+| `createdAt` | string | yes |  |
+| `readAt` | string or null | yes |  |
+
 ### Op
 
 One change to a case. The `type` field picks the shape; see `OpSchema` in [`packages/core/src/ops/ops.ts`](../packages/core/src/ops/ops.ts) and the `Op` schema in `/api/openapi.json`.
 
-`noop`, `case.set`, `host.add`, `host.set`, `host.remove`, `event.add`, `event.set`, `event.remove`, `scan.add`, `scan.set`, `scan.remove`, `link.set`, `link.remove`, `attachment.add`, `attachment.set`, `attachment.remove`, `batch`, `op.revert`
+`noop`, `case.set`, `host.add`, `host.set`, `host.remove`, `event.add`, `event.set`, `event.remove`, `scan.add`, `scan.set`, `scan.remove`, `link.set`, `link.remove`, `attachment.add`, `attachment.set`, `attachment.remove`, `task.add`, `task.set`, `task.remove`, `comment.add`, `comment.set`, `comment.remove`, `batch`, `op.revert`
 
 ### CaseState
 
@@ -782,6 +889,42 @@ One change to a case. The `type` field picks the shape; see `OpSchema` in [`pack
 | `scans` | map to [ScanMeta](#scanmeta) | yes |  |
 | `links` | map to object | yes |  |
 | `attachments` | map to [AttachmentMeta](#attachmentmeta) | yes |  |
+| `tasks` | map to [Task](#task) |  | Default `{}`. |
+| `comments` | map to [TaskComment](#taskcomment) |  | Default `{}`. |
+
+### Task
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `title` | string |  |  |
+| `description` | string |  |  |
+| `status` | `backlog`, `todo`, `doing`, `blocked`, `review`, `done` | yes | Default `"todo"`. |
+| `priority` | `urgent`, `high`, `normal`, `low` | yes | Default `"normal"`. |
+| `assignees` | array of string |  | Default `[]`. |
+| `hostIds` | array of string |  | Default `[]`. |
+| `eventIds` | array of string |  | Default `[]`. |
+| `technique` | string |  |  |
+| `tags` | array of string |  | Default `[]`. |
+| `due` | string |  |  |
+| `checklist` | array of object |  | Default `[]`. |
+| `outcome` | string |  |  |
+| `rank` | number | yes | Default `0`. |
+| `createdBy` | string |  |  |
+| `createdByName` | string |  |  |
+| `createdAt` | string |  |  |
+| `completedAt` | string |  |  |
+| `id` | string | yes |  |
+
+### TaskComment
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+| `taskId` | string | yes |  |
+| `authorId` | string |  |  |
+| `authorName` | string |  |  |
+| `ts` | string |  |  |
+| `text` | string |  |  |
 
 ### Event
 
@@ -947,3 +1090,10 @@ One change to a case. The `type` field picks the shape; see `OpSchema` in [`pack
 | `name` | string | yes |  |
 | `scope` | `read`, `write` |  | Default `"read"`. |
 | `expiresInDays` | integer |  |  |
+
+### MarkRead
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `ids` | array of string |  |  |
+| `all` | boolean |  |  |

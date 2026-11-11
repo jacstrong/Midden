@@ -1,5 +1,5 @@
 /** The example investigation shipped with the tool (same data as the prototype's demo). */
-import type { CaseState, Event, Host } from '../domain/types.js';
+import type { CaseState, Event, Host, Task } from '../domain/types.js';
 import { emptyState } from '../ops/reducer.js';
 
 const H = (
@@ -392,5 +392,117 @@ export function demoCaseState(now: string = '2026-07-15T09:00:00.000Z'): CaseSta
   ];
   for (const h of hosts) s.hosts[h.id] = h;
   for (const e of events) s.events[e.id] = e;
+  for (const t of demoTasks(now)) s.tasks[t.id] = t;
   return s;
+}
+
+/** The hunt work that follows from the timeline. Standalone has no accounts, so assignees are names. */
+function demoTasks(now: string): Task[] {
+  const T = (
+    id: string,
+    rank: number,
+    status: Task['status'],
+    priority: Task['priority'],
+    title: string,
+    assignees: string[],
+    hostIds: string[],
+    technique: string,
+    checklist: string[],
+    extra: Partial<Task> = {},
+  ): Task => ({
+    id,
+    title,
+    description: '',
+    status,
+    priority,
+    assignees,
+    hostIds,
+    eventIds: [],
+    technique,
+    tags: [],
+    due: '',
+    checklist: checklist.map((text, i) => ({ id: `${id}_ck${i}`, text, done: status === 'done' })),
+    outcome: '',
+    rank,
+    createdBy: 'lead',
+    createdByName: 'Hunt lead',
+    createdAt: now,
+    completedAt: status === 'done' ? now : '',
+    ...extra,
+  });
+  return [
+    T(
+      'task_demo_1',
+      0,
+      'done',
+      'urgent',
+      'Disable the rogue GPO before 18:00Z',
+      ['M. Okafor'],
+      ['h_dc'],
+      'T1484.001',
+      [
+        'Unlink "Windows Update Policy v2"',
+        'Delete the GPO',
+        'Confirm with gpresult on two clients',
+      ],
+      { outcome: 'GPO removed at 17:41Z. No client applied it.', eventIds: ['ev_demo_14'] },
+    ),
+    T(
+      'task_demo_2',
+      0,
+      'doing',
+      'urgent',
+      'Reset svc_backup and audit every domain admin',
+      ['M. Okafor', 'D. Lindqvist'],
+      ['h_dc'],
+      'T1078.002',
+      ['Reset svc_backup twice', 'Export Domain Admins membership', 'Review 4728/4732 since 07-10'],
+    ),
+    T(
+      'task_demo_3',
+      1,
+      'doing',
+      'high',
+      'Image the file server before anything else touches it',
+      ['D. Lindqvist'],
+      ['h_file'],
+      '',
+      ['Memory capture', 'Full disk image', 'Hash and log custody'],
+    ),
+    T(
+      'task_demo_4',
+      0,
+      'todo',
+      'high',
+      'Hunt for rclone and other exfil tooling across servers',
+      [],
+      [],
+      'T1567.002',
+      ['EDR query for rclone, rc.exe, mega', 'Proxy: other hosts reaching mega.nz'],
+      { tags: ['exfil'] },
+    ),
+    T(
+      'task_demo_5',
+      1,
+      'todo',
+      'normal',
+      'Check the backup server for further tampering',
+      [],
+      ['h_bkp'],
+      'T1490',
+      ['Veeam job history', 'Shadow copy state on remaining servers'],
+    ),
+    T(
+      'task_demo_6',
+      0,
+      'blocked',
+      'normal',
+      'Get the cloud storage provider to preserve the account',
+      ['R. Patel'],
+      [],
+      '',
+      [],
+      { description: 'Waiting on Legal to send the preservation request.' },
+    ),
+  ];
 }

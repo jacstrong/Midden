@@ -45,6 +45,10 @@
       "description": "The operation log: how a case changes."
     },
     {
+      "name": "Tasks",
+      "description": "Who can be assigned work, who follows it, and notices. Tasks themselves are changed with `task.*` and `comment.*` operations."
+    },
+    {
       "name": "Scans",
       "description": "Uploaded nmap scans and the terrain they map."
     },
@@ -1917,6 +1921,437 @@
         }
       }
     },
+    "/api/cases/{id}/people": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "The people who can be assigned tasks in a case",
+        "description": "Everyone with an enabled account who can read the case. `canEdit` says whether they can also move their own cards.",
+        "operationId": "get_cases_id_people",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "people": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "canEdit": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "username",
+                          "displayName",
+                          "canEdit"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "people"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cases/{id}/follows": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Who follows which task",
+        "operationId": "get_cases_id_follows",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "follows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "taskId": {
+                            "type": "string"
+                          },
+                          "userId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "taskId",
+                          "userId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "follows"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cases/{id}/tasks/{taskId}/follow": {
+      "put": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Follow a task",
+        "description": "Followers are notified of every change to the task, as its assignees are. Read access is enough, so a viewer can follow work too.",
+        "operationId": "put_cases_id_tasks_taskId_follow",
+        "x-midden-token": "write",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Stop following a task",
+        "operationId": "delete_cases_id_tasks_taskId_follow",
+        "x-midden-token": "write",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Your notices about tasks, newest first",
+        "description": "Notices also arrive live over the WebSocket as `{\"t\":\"notify\"}` messages. Notices from cases you can no longer read are left out.",
+        "operationId": "get_notifications",
+        "x-midden-token": "read",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "notifications": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "unread": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "notifications",
+                    "unread"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/read": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Mark notices as read",
+        "operationId": "post_notifications_read",
+        "x-midden-token": "write",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRead"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "unread": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "unread"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cases/{id}/scans": {
       "get": {
         "tags": [
@@ -3373,6 +3808,85 @@
         ],
         "additionalProperties": {}
       },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "caseId": {
+            "type": "string"
+          },
+          "caseName": {
+            "type": "string"
+          },
+          "taskId": {
+            "description": "Null when the notice sums up a change to several tasks.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "The operation that caused it."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "assigned",
+              "unassigned",
+              "status",
+              "updated",
+              "commented",
+              "deleted",
+              "summary"
+            ]
+          },
+          "actor": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "What happened, to follow the actor name."
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "readAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "caseId",
+          "caseName",
+          "taskId",
+          "seq",
+          "kind",
+          "actor",
+          "text",
+          "createdAt",
+          "readAt"
+        ]
+      },
       "Op": {
         "oneOf": [
           {
@@ -3916,6 +4430,221 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "task.add"
+              },
+              "task": {
+                "$ref": "#/components/schemas/Task"
+              }
+            },
+            "required": [
+              "type",
+              "task"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "task.set"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "patch": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "backlog",
+                      "todo",
+                      "doing",
+                      "blocked",
+                      "review",
+                      "done"
+                    ]
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "urgent",
+                      "high",
+                      "normal",
+                      "low"
+                    ]
+                  },
+                  "assignees": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "hostIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "eventIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "technique": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "due": {
+                    "type": "string"
+                  },
+                  "checklist": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "done": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "text",
+                        "done"
+                      ]
+                    }
+                  },
+                  "outcome": {
+                    "type": "string"
+                  },
+                  "rank": {
+                    "type": "number"
+                  },
+                  "createdBy": {
+                    "type": "string"
+                  },
+                  "createdByName": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "string"
+                  },
+                  "completedAt": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "patch"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "task.remove"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "comment.add"
+              },
+              "comment": {
+                "$ref": "#/components/schemas/TaskComment"
+              }
+            },
+            "required": [
+              "type",
+              "comment"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "comment.set"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "patch": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "patch"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "comment.remove"
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "batch"
               },
               "ops": {
@@ -4048,6 +4777,26 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/AttachmentMeta"
             }
+          },
+          "tasks": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "comments": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskComment"
+            }
           }
         },
         "required": [
@@ -4057,6 +4806,171 @@
           "scans",
           "links",
           "attachments"
+        ]
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "todo",
+            "type": "string",
+            "enum": [
+              "backlog",
+              "todo",
+              "doing",
+              "blocked",
+              "review",
+              "done"
+            ]
+          },
+          "priority": {
+            "default": "normal",
+            "type": "string",
+            "enum": [
+              "urgent",
+              "high",
+              "normal",
+              "low"
+            ]
+          },
+          "assignees": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "hostIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "eventIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "technique": {
+            "default": "",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "due": {
+            "default": "",
+            "type": "string"
+          },
+          "checklist": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "text": {
+                  "type": "string"
+                },
+                "done": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "text",
+                "done"
+              ]
+            }
+          },
+          "outcome": {
+            "default": "",
+            "type": "string"
+          },
+          "rank": {
+            "default": 0,
+            "type": "number"
+          },
+          "createdBy": {
+            "default": "",
+            "type": "string"
+          },
+          "createdByName": {
+            "default": "",
+            "type": "string"
+          },
+          "createdAt": {
+            "default": "",
+            "type": "string"
+          },
+          "completedAt": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "status",
+          "priority",
+          "rank",
+          "id"
+        ]
+      },
+      "TaskComment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authorId": {
+            "default": "",
+            "type": "string"
+          },
+          "authorName": {
+            "default": "",
+            "type": "string"
+          },
+          "ts": {
+            "default": "",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "taskId"
         ]
       },
       "Event": {
@@ -4647,6 +5561,22 @@
         "required": [
           "name"
         ]
+      },
+      "MarkRead": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "all": {
+            "type": "boolean"
+          }
+        }
       }
     }
   }

@@ -112,6 +112,45 @@ export const AttachmentMetaSchema = z.object({
   dangerous: z.boolean().default(false),
 });
 
+export const TaskStatusSchema = z.enum(['backlog', 'todo', 'doing', 'blocked', 'review', 'done']);
+export const TaskPrioritySchema = z.enum(['urgent', 'high', 'normal', 'low']);
+export const ChecklistItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  done: z.boolean(),
+});
+const ids = z.array(z.string().min(1)).default([]);
+
+export const TaskFieldsSchema = z.object({
+  title: str,
+  description: str,
+  status: TaskStatusSchema.catch('todo'),
+  priority: TaskPrioritySchema.catch('normal'),
+  assignees: ids,
+  hostIds: ids,
+  eventIds: ids,
+  technique: str,
+  tags,
+  due: str,
+  checklist: z.array(ChecklistItemSchema).default([]),
+  outcome: str,
+  rank: z.number().finite().catch(0),
+  createdBy: str,
+  createdByName: str,
+  createdAt: str,
+  completedAt: str,
+});
+export const TaskSchema = TaskFieldsSchema.extend({ id: z.string().min(1) });
+
+export const TaskCommentSchema = z.object({
+  id: z.string().min(1),
+  taskId: z.string().min(1),
+  authorId: str,
+  authorName: str,
+  ts: str,
+  text: str,
+});
+
 export const CaseStateSchema = z.object({
   case: CaseMetaSchema,
   hosts: z.record(z.string(), HostSchema),
@@ -119,6 +158,8 @@ export const CaseStateSchema = z.object({
   scans: z.record(z.string(), ScanMetaSchema),
   links: z.record(z.string(), LinkSchema),
   attachments: z.record(z.string(), AttachmentMetaSchema),
+  tasks: z.record(z.string(), TaskSchema).default({}),
+  comments: z.record(z.string(), TaskCommentSchema).default({}),
 });
 
 /*
@@ -198,3 +239,26 @@ export const ScanPatchSchema = z
     error: s,
   })
   .partial();
+export const TaskPatchSchema = z
+  .object({
+    title: s,
+    description: s,
+    status: TaskStatusSchema,
+    priority: TaskPrioritySchema,
+    assignees: z.array(z.string().min(1)),
+    hostIds: z.array(z.string().min(1)),
+    eventIds: z.array(z.string().min(1)),
+    technique: s,
+    tags: z.array(z.string()),
+    due: s,
+    checklist: z.array(ChecklistItemSchema),
+    outcome: s,
+    rank: z.number().finite(),
+    createdBy: s,
+    createdByName: s,
+    createdAt: s,
+    completedAt: s,
+  })
+  .partial();
+/** Only the text of a comment changes after it is written. */
+export const CommentPatchSchema = z.object({ text: s }).partial();

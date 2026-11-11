@@ -46,6 +46,8 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
     const opActor = actorOf(req);
     const actor = { id: opActor.id, name: opActor.name };
     const clientId = newId('c');
+    // Task notices reach every socket the person has open, whichever case it is watching.
+    app.channels.add(user.id, clientId, (m) => send(m as ServerMessage));
     let rt: CaseRuntime | null = null;
     let canEdit = false;
 
@@ -150,7 +152,11 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     });
-    socket.on('close', leave);
-    socket.on('error', leave);
+    const end = (): void => {
+      app.channels.remove(user.id, clientId);
+      leave();
+    };
+    socket.on('close', end);
+    socket.on('error', end);
   });
 }

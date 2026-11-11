@@ -4,6 +4,7 @@ import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore } from '../store/useUiStore';
 import { exportJson, openCaseFile } from '../lib/caseActions';
 import { PresenceStrip } from './PresenceStrip';
+import { NotificationBell } from './NotificationBell';
 import { useRoute } from '../lib/router';
 
 function CommitInput({
@@ -146,6 +147,7 @@ export function TopBar() {
             />
           </>
         )}
+        {multiUser && <NotificationBell />}
         <button
           className="btn ghost"
           title="More"

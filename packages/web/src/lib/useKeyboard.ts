@@ -4,7 +4,7 @@ import { useCaseStore } from '../store/useCaseStore';
 import { useAutosave } from './autosave';
 import { exportJson } from './caseActions';
 
-/** N new event · H new host · / search · Ctrl+S save · Esc close. */
+/** N new event · H new host · T new task · / search · Ctrl+S save · Esc close. */
 export function useKeyboard(): void {
   useEffect(() => {
     const onKey = (ev: KeyboardEvent): void => {
@@ -38,6 +38,9 @@ export function useKeyboard(): void {
       } else if (ev.key.toLowerCase() === 'h' && useCaseStore.getState().access.edit) {
         ev.preventDefault();
         ui.openModal({ kind: 'host', id: null });
+      } else if (ev.key.toLowerCase() === 't' && useCaseStore.getState().access.edit) {
+        ev.preventDefault();
+        ui.openModal({ kind: 'task', id: null });
       }
     };
     document.addEventListener('keydown', onKey);

@@ -6,6 +6,8 @@ import { CaseEditor } from './CaseEditor';
 import { MenuModal } from './MenuModal';
 import { ImportDialog } from './ImportDialog';
 import { AttachmentUploadDialog, AttachmentDetailDialog } from './AttachmentDialogs';
+import { TaskEditor } from '../tasks/TaskEditor';
+import { TaskBulkDialog, TaskCopyDialog, TaskImportDialog } from '../tasks/TaskDialogs';
 
 export function ModalRoot() {
   const modal = useUiStore((s) => s.modal);
@@ -25,6 +27,21 @@ export function ModalRoot() {
           returnTo={modal.returnTo}
         />
       );
+    case 'task':
+      return (
+        <TaskEditor
+          key={modal.id ?? 'new'}
+          id={modal.id}
+          draft={modal.draft}
+          returnTo={modal.returnTo}
+        />
+      );
+    case 'task-bulk':
+      return <TaskBulkDialog ids={modal.ids} />;
+    case 'task-import':
+      return <TaskImportDialog />;
+    case 'task-copy':
+      return <TaskCopyDialog ids={modal.ids} />;
     case 'case':
       return <CaseEditor />;
     case 'menu':

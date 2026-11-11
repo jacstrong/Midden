@@ -11,14 +11,17 @@ export type Route =
   | { kind: 'users' }
   | { kind: 'tokens' }
   | { kind: 'password' }
-  | { kind: 'case'; caseId: string; view: CaseView }
+  | { kind: 'case'; caseId: string; view: CaseView; taskId?: string | undefined }
   | { kind: 'standalone'; view: ViewId };
 
 const isView = (v: string | undefined): v is ViewId => !!v && (VIEW_IDS as string[]).includes(v);
 const isCaseView = (v: string | undefined): v is CaseView =>
   !!v && (CASE_VIEWS as string[]).includes(v);
 
-/** Hash routes work from file:// too. Hosted: #/cases, #/c/<id>/<view>, #/users, #/login. Standalone: #/<view>. */
+/**
+ * Hash routes work from file:// too. Hosted: #/cases, #/c/<id>/<view>, #/c/<id>/tasks/<taskId>,
+ * #/users, #/login. Standalone: #/<view>.
+ */
 export function parseRoute(hash: string, mode: 'server' | 'standalone'): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (mode === 'standalone')
@@ -35,7 +38,10 @@ export function parseRoute(hash: string, mode: 'server' | 'standalone'): Route {
     case 'c': {
       const caseId = parts[1];
       if (!caseId) return { kind: 'cases' };
-      return { kind: 'case', caseId, view: isCaseView(parts[2]) ? parts[2] : 'graph' };
+      const view = isCaseView(parts[2]) ? parts[2] : 'graph';
+      return view === 'tasks' && parts[3]
+        ? { kind: 'case', caseId, view, taskId: parts[3] }
+        : { kind: 'case', caseId, view };
     }
     default:
       return { kind: 'cases' };
@@ -55,7 +61,7 @@ export function routeHash(r: Route): string {
     case 'password':
       return '#/password';
     case 'case':
-      return `#/c/${r.caseId}/${r.view}`;
+      return `#/c/${r.caseId}/${r.view}${r.view === 'tasks' && r.taskId ? `/${r.taskId}` : ''}`;
     case 'standalone':
       return `#/${r.view}`;
   }
@@ -104,7 +110,7 @@ export function useHashRouter(): void {
 /** Navigate to a view within the current context (standalone view or case view). */
 export function goToView(view: CaseView): void {
   const { route, navigate } = useRoute.getState();
-  if (route.kind === 'case') navigate({ ...route, view });
+  if (route.kind === 'case') navigate({ kind: 'case', caseId: route.caseId, view });
   else if (route.kind === 'standalone' && view !== 'history')
     navigate({ kind: 'standalone', view });
 }

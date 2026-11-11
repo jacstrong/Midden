@@ -59,6 +59,8 @@ Three things make this safe to automate:
 
 A `*.set` operation carries only the fields you're changing, so it doesn't disturb anyone else's edits. The operations are listed under [Op](api-reference.md#op).
 
+Tasks work the same way, with `task.add`, `task.set` and `comment.add`. Their assignees and followers are notified of each change; a script can read its owner's notices from `GET /api/notifications`. See [Running a hunt with tasks](tasks.md).
+
 ## Reading a case
 
 - `GET /api/cases/{id}/state` returns the whole case and the `seq` it reflects.

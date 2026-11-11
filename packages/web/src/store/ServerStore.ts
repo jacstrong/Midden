@@ -176,6 +176,10 @@ export class ServerStore implements CaseStoreAdapter {
         break;
       case 'scan':
         break;
+      case 'notify':
+        // The bell owns notices; this socket is just one of the ways they arrive.
+        window.dispatchEvent(new CustomEvent('midden:notify', { detail: m.notification }));
+        break;
     }
   }
 

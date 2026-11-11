@@ -5,9 +5,9 @@
  *
  * Invariant (property-tested): apply(apply(s, op), inverse(s, op)) deep-equals s.
  *
- * Removing a host or scan does not touch events or links that reference it; references are
- * left dangling and rendered as "(deleted host)". That keeps every inverse total and simple,
- * and means a revert of the removal restores the relationships for free.
+ * Removing a host, scan or task does not touch the events, links, tasks or comments that
+ * reference it; references are left dangling and rendered as "(deleted host)". That keeps every
+ * inverse total and simple, and means a revert of the removal restores the relationships for free.
  */
 import type { CaseState, Link } from '../domain/types.js';
 import { linkKey } from '../domain/types.js';
@@ -29,6 +29,26 @@ export function emptyState(now: string = new Date().toISOString()): CaseState {
     scans: {},
     links: {},
     attachments: {},
+    tasks: {},
+    comments: {},
+  };
+}
+
+/**
+ * Fill in collections a state was saved without. Snapshots and files written before tasks
+ * existed have no `tasks` or `comments`; everything that loads a stored state goes through here.
+ */
+export function normalizeState(raw: Partial<CaseState>, now?: string): CaseState {
+  const base = emptyState(now);
+  return {
+    case: { ...base.case, ...(raw.case ?? {}) },
+    hosts: raw.hosts ?? {},
+    events: raw.events ?? {},
+    scans: raw.scans ?? {},
+    links: raw.links ?? {},
+    attachments: raw.attachments ?? {},
+    tasks: raw.tasks ?? {},
+    comments: raw.comments ?? {},
   };
 }
 
@@ -119,6 +139,28 @@ export function apply(state: CaseState, op: Op): CaseState {
     case 'attachment.remove':
       if (!state.attachments[op.id]) return state;
       return { ...state, attachments: without(state.attachments, op.id) };
+    case 'task.add':
+      if (state.tasks[op.task.id]) return state;
+      return { ...state, tasks: { ...state.tasks, [op.task.id]: op.task } };
+    case 'task.set': {
+      const t = state.tasks[op.id];
+      if (!t) return state;
+      return { ...state, tasks: { ...state.tasks, [op.id]: patched(t, op.patch) } };
+    }
+    case 'task.remove':
+      if (!state.tasks[op.id]) return state;
+      return { ...state, tasks: without(state.tasks, op.id) };
+    case 'comment.add':
+      if (state.comments[op.comment.id]) return state;
+      return { ...state, comments: { ...state.comments, [op.comment.id]: op.comment } };
+    case 'comment.set': {
+      const c = state.comments[op.id];
+      if (!c) return state;
+      return { ...state, comments: { ...state.comments, [op.id]: patched(c, op.patch) } };
+    }
+    case 'comment.remove':
+      if (!state.comments[op.id]) return state;
+      return { ...state, comments: without(state.comments, op.id) };
     case 'batch':
       return op.ops.reduce(apply, state);
     case 'op.revert':
@@ -188,6 +230,26 @@ export function inverse(state: CaseState, op: Op): Op {
     case 'attachment.remove': {
       const a = state.attachments[op.id];
       return a ? { type: 'attachment.add', att: a } : NOOP;
+    }
+    case 'task.add':
+      return state.tasks[op.task.id] ? NOOP : { type: 'task.remove', id: op.task.id };
+    case 'task.set': {
+      const t = state.tasks[op.id];
+      return t ? { type: 'task.set', id: op.id, patch: priorOf(t, op.patch) } : NOOP;
+    }
+    case 'task.remove': {
+      const t = state.tasks[op.id];
+      return t ? { type: 'task.add', task: t } : NOOP;
+    }
+    case 'comment.add':
+      return state.comments[op.comment.id] ? NOOP : { type: 'comment.remove', id: op.comment.id };
+    case 'comment.set': {
+      const c = state.comments[op.id];
+      return c ? { type: 'comment.set', id: op.id, patch: priorOf(c, op.patch) } : NOOP;
+    }
+    case 'comment.remove': {
+      const c = state.comments[op.id];
+      return c ? { type: 'comment.add', comment: c } : NOOP;
     }
     case 'batch': {
       const inverses: Op[] = [];

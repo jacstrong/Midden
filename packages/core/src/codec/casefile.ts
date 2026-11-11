@@ -4,7 +4,16 @@
  * exact v1 shapes, so a v2 file still opens in the old prototype (which ignores `schema`).
  */
 import { z } from 'zod';
-import type { AttachmentMeta, CaseState, Event, Host, Link, ScanMeta } from '../domain/types.js';
+import type {
+  AttachmentMeta,
+  CaseState,
+  Event,
+  Host,
+  Link,
+  ScanMeta,
+  Task,
+  TaskComment,
+} from '../domain/types.js';
 import { linkKey } from '../domain/types.js';
 import {
   AttachmentMetaSchema,
@@ -13,6 +22,8 @@ import {
   HostSchema,
   LinkSchema,
   ScanMetaSchema,
+  TaskCommentSchema,
+  TaskSchema,
 } from '../domain/schemas.js';
 import { uid } from '../domain/ids.js';
 import { emptyState } from '../ops/reducer.js';
@@ -46,6 +57,8 @@ export interface CaseFileV2 {
   scans: ScanFileEntry[];
   links: Link[];
   attachments: AttachmentFileEntry[];
+  tasks: Task[];
+  comments: TaskComment[];
 }
 
 export interface ImportReport {
@@ -55,7 +68,13 @@ export interface ImportReport {
   scans: number;
   links: number;
   attachments: number;
-  remapped: Array<{ kind: 'host' | 'event' | 'scan' | 'attachment'; from: string; to: string }>;
+  tasks: number;
+  comments: number;
+  remapped: Array<{
+    kind: 'host' | 'event' | 'scan' | 'attachment' | 'task' | 'comment';
+    from: string;
+    to: string;
+  }>;
   dropped: Array<{ kind: string; index: number; reason: string }>;
 }
 
@@ -74,6 +93,8 @@ const Envelope = z.object({
   scans: z.array(z.unknown()).optional(),
   links: z.array(z.unknown()).optional(),
   attachments: z.array(z.unknown()).optional(),
+  tasks: z.array(z.unknown()).optional(),
+  comments: z.array(z.unknown()).optional(),
 });
 
 const ScanEntrySchema = ScanMetaSchema.extend({ hosts: z.array(ScanHostSchema).optional() });
@@ -104,6 +125,8 @@ export function readCaseFile(
     scans: 0,
     links: 0,
     attachments: 0,
+    tasks: 0,
+    comments: 0,
     remapped: [],
     dropped: [],
   };
@@ -204,6 +227,37 @@ export function readCaseFile(
     report.attachments++;
   });
 
+  const taskIdMap = new Map<string, string>();
+  (d.tasks ?? []).forEach((raw, index) => {
+    const parsed = TaskSchema.safeParse(raw);
+    if (!parsed.success)
+      return void report.dropped.push({ kind: 'task', index, reason: firstIssue(parsed.error) });
+    let id = parsed.data.id;
+    if (state.tasks[id]) {
+      const fresh = uid('task');
+      report.remapped.push({ kind: 'task', from: id, to: fresh });
+      taskIdMap.set(id, fresh);
+      id = fresh;
+    }
+    state.tasks[id] = { ...parsed.data, id };
+    report.tasks++;
+  });
+
+  (d.comments ?? []).forEach((raw, index) => {
+    const parsed = TaskCommentSchema.safeParse(raw);
+    if (!parsed.success)
+      return void report.dropped.push({ kind: 'comment', index, reason: firstIssue(parsed.error) });
+    let id = parsed.data.id;
+    if (state.comments[id]) {
+      const fresh = uid('cm');
+      report.remapped.push({ kind: 'comment', from: id, to: fresh });
+      id = fresh;
+    }
+    const taskId = taskIdMap.get(parsed.data.taskId) ?? parsed.data.taskId;
+    state.comments[id] = { ...parsed.data, id, taskId };
+    report.comments++;
+  });
+
   return { state, terrain, attachmentData, report };
 }
 
@@ -241,6 +295,12 @@ export function writeCaseFile(state: CaseState, opts: WriteOptions = {}): CaseFi
       const data = opts.attachmentData?.[a.id];
       return data ? { ...a, data } : { ...a };
     }),
+    tasks: Object.values(state.tasks).sort(
+      (a, b) => a.rank - b.rank || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    ),
+    comments: Object.values(state.comments).sort(
+      (a, b) => a.ts.localeCompare(b.ts) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    ),
   };
 }
 
@@ -261,5 +321,9 @@ export function mergeOps(current: CaseState, incoming: CaseState): Op {
       ops.push({ type: 'link.set', hostId: l.hostId, ip: l.ip });
   for (const a of Object.values(incoming.attachments))
     if (!current.attachments[a.id]) ops.push({ type: 'attachment.add', att: a });
+  for (const t of Object.values(incoming.tasks))
+    if (!current.tasks[t.id]) ops.push({ type: 'task.add', task: t });
+  for (const c of Object.values(incoming.comments))
+    if (!current.comments[c.id]) ops.push({ type: 'comment.add', comment: c });
   return { type: 'batch', ops };
 }

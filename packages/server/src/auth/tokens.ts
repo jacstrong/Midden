@@ -158,6 +158,11 @@ const TOKEN_ROUTES: Record<string, readonly string[]> = {
   '/api/cases/:id/scans/:scanId/map': ['GET'],
   '/api/cases/:id/scans/:scanId/targets.txt': ['GET'],
   '/api/cases/:id/scans/:scanId/raw': ['GET'],
+  '/api/cases/:id/people': ['GET'],
+  '/api/cases/:id/follows': ['GET'],
+  '/api/cases/:id/tasks/:taskId/follow': ['PUT', 'DELETE'],
+  '/api/notifications': ['GET'],
+  '/api/notifications/read': ['POST'],
 };
 
 export type TokenDenial = 'browser_only' | 'read_only';

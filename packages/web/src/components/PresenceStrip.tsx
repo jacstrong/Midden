@@ -1,12 +1,5 @@
 import { useCaseStore } from '../store/useCaseStore';
-import { initials } from '../lib/format';
-import { LANE_COLORS } from '@midden/core';
-
-const colorFor = (id: string): string => {
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return LANE_COLORS[h % LANE_COLORS.length]!;
-};
+import { colorFor, initials } from '../lib/format';
 
 export function PresenceStrip() {
   const presence = useCaseStore((s) => s.presence);

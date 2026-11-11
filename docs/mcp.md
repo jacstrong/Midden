@@ -47,24 +47,29 @@ Midden uses the Streamable HTTP transport with a token in a header. It doesn't o
 | `list_scan_hosts`  | Pages through a scan's hosts, filtered by text, port or flag. |
 | `get_scan_host`    | Gets one scanned host with ports, scripts and traceroute.     |
 | `list_attachments` | Lists evidence names, hashes and notes.                       |
+| `list_tasks`       | Lists the task board, filtered by column, assignee or text.   |
+| `get_task`         | Gets one task in full, with its comments.                     |
 | `get_history`      | Reads the audit log.                                          |
 
 **With a write token only:**
 
-| Tool            | What it does                              |
-| --------------- | ----------------------------------------- |
-| `add_event`     | Adds an event to the timeline.            |
-| `update_event`  | Changes fields on an event.               |
-| `add_host`      | Adds a host.                              |
-| `update_host`   | Changes fields on a host, such as status. |
-| `revert_change` | Undoes one change from the history.       |
+| Tool              | What it does                                            |
+| ----------------- | ------------------------------------------------------- |
+| `add_event`       | Adds an event to the timeline.                          |
+| `update_event`    | Changes fields on an event.                             |
+| `add_host`        | Adds a host.                                            |
+| `update_host`     | Changes fields on a host, such as status.               |
+| `add_task`        | Adds a task to the board, assigned to whoever it names. |
+| `update_task`     | Moves a task, or records its outcome.                   |
+| `comment_on_task` | Comments on a task.                                     |
+| `revert_change`   | Undoes one change from the history.                     |
 
 A read-only token isn't offered the write tools at all, and they're refused if it calls them anyway.
 
 There are limits on purpose:
 
 - **An agent can't read file contents.** It sees attachment names and hashes, but never the bytes, so a flagged malware sample is never handed to one.
-- **An agent can't delete events, hosts or cases, or change who can see a case.** To undo its own work it appends a reversal, which stays in the history.
+- **An agent can't delete events, hosts, tasks or cases, or change who can see a case.** To undo its own work it appends a reversal, which stays in the history.
 - **An agent never has more access than the token's owner.** If that person can't see a restricted case, neither can their agent.
 
 Every tool calls the same [API](api.md) as any other client, so these rules and the normal permission checks are enforced by the server rather than by the agent's good behaviour.

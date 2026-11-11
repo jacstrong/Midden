@@ -16,6 +16,9 @@ import { ScansView } from './views/ScansView';
 import { MapView } from './views/MapView';
 import { BuilderView } from './views/BuilderView';
 import { HistoryView } from './views/HistoryView';
+import { TasksView } from './views/TasksView';
+import { usePeople } from './store/usePeople';
+import { useTaskBoard } from './store/useTaskBoard';
 import { useUiStore } from './store/useUiStore';
 import { useCaseStore } from './store/useCaseStore';
 import { useSession } from './store/useSession';
@@ -111,6 +114,7 @@ function HostedCase({ caseId, history }: { caseId: string; history: boolean }) {
           access: r.case.access,
         });
         useTerrain.getState().setStore(new ServerTerrain(caseId, r.case.access.edit));
+        void usePeople.getState().load(caseId);
       })
       .catch(() => {
         toast('Case not found', 'bad');
@@ -118,6 +122,8 @@ function HostedCase({ caseId, history }: { caseId: string; history: boolean }) {
       });
     return () => {
       cancelled = true;
+      usePeople.getState().reset();
+      useTaskBoard.getState().clearSelection();
       attachAdapter(new LocalFileStore(emptyState()));
       useTerrain.getState().setStore(new MemoryTerrain());
     };
@@ -126,7 +132,9 @@ function HostedCase({ caseId, history }: { caseId: string; history: boolean }) {
   useEffect(() => {
     if (adapter instanceof ServerStore) {
       const editingId =
-        modal.kind === 'event' || modal.kind === 'host' ? (modal.id ?? undefined) : undefined;
+        modal.kind === 'event' || modal.kind === 'host' || modal.kind === 'task'
+          ? (modal.id ?? undefined)
+          : undefined;
       adapter.presence(history ? 'history' : view, sel ?? undefined, editingId);
     }
   }, [adapter, view, sel, modal, history]);
@@ -168,6 +176,7 @@ export function CaseShell({ history = false }: { history?: boolean }) {
               {current === 'map' && <MapView />}
               {current === 'builder' && <BuilderView />}
               {current === 'report' && <ReportView />}
+              {current === 'tasks' && <TasksView />}
               {current === 'history' && <HistoryView />}
             </section>
           </div>

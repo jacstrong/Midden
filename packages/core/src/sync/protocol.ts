@@ -38,6 +38,22 @@ export interface PresenceEntry {
   since: string;
 }
 
+/** A notice about a task, as the server stores it and pushes it to the person it is for. */
+export interface TaskNotification {
+  id: string;
+  caseId: string;
+  caseName: string;
+  /** Null for a summary of a bulk change. */
+  taskId: string | null;
+  seq: number;
+  kind: string;
+  actor: Actor;
+  /** Without the actor's name: "assigned you to “Sweep the DCs”". */
+  text: string;
+  createdAt: string;
+  readAt: string | null;
+}
+
 export type ScanProgressStatus = 'parsing' | 'ready' | 'failed';
 
 export type ClientMessage =
@@ -60,6 +76,7 @@ export type ServerMessage =
       hosts?: number | undefined;
       error?: string | undefined;
     }
+  | { t: 'notify'; notification: TaskNotification }
   | { t: 'pong' }
   | { t: 'error'; message: string };
 

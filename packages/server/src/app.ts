@@ -26,6 +26,8 @@ import { caseRoutes } from './cases/routes.js';
 import { wsRoutes } from './sync/ws.js';
 import { adminRoutes } from './admin/routes.js';
 import { mcpRoutes } from './mcp/routes.js';
+import { taskRoutes } from './tasks/routes.js';
+import { notifyTaskChanges, UserChannels } from './tasks/notifications.js';
 import { openApiDocument } from './openapi/spec.js';
 import type { Config } from './config.js';
 
@@ -34,6 +36,8 @@ declare module 'fastify' {
     db: Db;
     cfg: Config;
     runtimes: RuntimeRegistry;
+    /** Sockets per user, for pushing task notices wherever that person has Midden open. */
+    channels: UserChannels;
     blobs: BlobStore;
     /** Every `METHOD /api/...` route, so the API description can be checked against reality. */
     apiRoutes: string[];
@@ -68,7 +72,18 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.decorate('db', db);
   app.decorate('cfg', cfg);
-  app.decorate('runtimes', new RuntimeRegistry(db));
+  const channels = new UserChannels();
+  app.decorate('channels', channels);
+  app.decorate(
+    'runtimes',
+    new RuntimeRegistry(db, undefined, (e) => {
+      try {
+        notifyTaskChanges(db, channels, e);
+      } catch (err) {
+        app.log.error(err, 'task notifications failed');
+      }
+    }),
+  );
   app.decorate('blobs', new BlobStore(db, cfg.blobDir ?? joinPath(cfg.dataDir, 'blobs')));
   app.decorate('pendingIngests', new Set<Promise<unknown>>());
   app.decorate('apiRoutes', []);
@@ -177,6 +192,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.register(terrainRoutes);
   app.register(attachmentRoutes);
   app.register(mcpRoutes);
+  app.register(taskRoutes);
 
   registerStatic(app, version);
 
