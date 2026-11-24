@@ -5,7 +5,7 @@ import { LocalFileStore } from './LocalFileStore';
 import { useCaseStore } from './useCaseStore';
 import { useUiStore } from './useUiStore';
 import { loadDemo } from '../lib/caseActions';
-import { parseHash } from '../lib/router';
+import { parseHash, parseRoute, routeHash } from '../lib/router';
 
 describe('LocalFileStore through the case store', () => {
   it('applies ops locally and tracks dirty state', async () => {
@@ -35,6 +35,38 @@ describe('hash router', () => {
     expect(parseHash('#graph')).toBe('graph');
     expect(parseHash('#/nope')).toBeNull();
     expect(parseHash('')).toBeNull();
+  });
+
+  it('parses task routes, with or without a view', () => {
+    expect(parseRoute('#/tasks', 'server')).toEqual({
+      kind: 'tasks',
+      viewId: 'mine',
+      taskNum: null,
+    });
+    expect(parseRoute('#/tasks/everyone', 'server')).toEqual({
+      kind: 'tasks',
+      viewId: 'everyone',
+      taskNum: null,
+    });
+    expect(parseRoute('#/tasks/tv_1/t/12', 'server')).toEqual({
+      kind: 'tasks',
+      viewId: 'tv_1',
+      taskNum: 12,
+    });
+    expect(parseRoute('#/tasks/t/T-7', 'server')).toEqual({
+      kind: 'tasks',
+      viewId: 'mine',
+      taskNum: 7,
+    });
+    expect(parseRoute('#/tasks/all/t/x', 'server')).toEqual({
+      kind: 'tasks',
+      viewId: 'all',
+      taskNum: null,
+    });
+    expect(routeHash({ kind: 'tasks', viewId: 'all', taskNum: 3 })).toBe('#/tasks/all/t/3');
+    expect(parseRoute('#/teams', 'server')).toEqual({ kind: 'teams' });
+    expect(parseRoute('#/playbooks', 'server')).toEqual({ kind: 'playbooks' });
+    expect(routeHash({ kind: 'playbooks' })).toBe('#/playbooks');
   });
 });
 

@@ -158,6 +158,24 @@ const TOKEN_ROUTES: Record<string, readonly string[]> = {
   '/api/cases/:id/scans/:scanId/map': ['GET'],
   '/api/cases/:id/scans/:scanId/targets.txt': ['GET'],
   '/api/cases/:id/scans/:scanId/raw': ['GET'],
+  // Tasks. Approvals are decided in person, so `approval.decide` is refused for tokens by the
+  // task permission check; teams, views, notifications and webhooks stay browser-only.
+  '/api/tasks': ['GET', 'POST'],
+  '/api/tasks/state': ['GET'],
+  '/api/tasks/insights': ['GET'],
+  '/api/metrics': ['GET'],
+  '/api/tasks/ops': ['GET', 'POST'],
+  '/api/tasks/revert': ['POST'],
+  '/api/tasks/import': ['POST'],
+  '/api/tasks/export': ['GET'],
+  '/api/tasks/:id': ['GET', 'PATCH'],
+  '/api/tasks/:id/comments': ['POST'],
+  '/api/tasks/:id/history': ['GET'],
+  '/api/task-runs': ['GET'],
+  '/api/workflows': ['GET'],
+  '/api/playbooks': ['GET'],
+  '/api/playbooks/:id': ['GET'],
+  '/api/teams': ['GET'],
 };
 
 export type TokenDenial = 'browser_only' | 'read_only';

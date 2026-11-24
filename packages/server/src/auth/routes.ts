@@ -194,6 +194,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       destroyUserSessions(app.db, target.id);
       revokeUserTokens(app.db, target.id);
     }
+    app.tasks.directoryChanged(); // role, name or disabled state feed task permissions and pickers
     return { user: publicUser(findUserById(app.db, target.id)!) };
   });
 }

@@ -19,6 +19,13 @@ import { HistoryView } from './views/HistoryView';
 import { useUiStore } from './store/useUiStore';
 import { useCaseStore } from './store/useCaseStore';
 import { useSession } from './store/useSession';
+import { useTasks } from './tasks/TaskStore';
+import { TasksPage } from './tasks/TasksPage';
+import { NewTaskHost } from './tasks/NewTaskDialog';
+import { TeamsPage } from './pages/TeamsPage';
+import { PlaybooksPage } from './pages/PlaybooksPage';
+import { InsightsPage } from './tasks/InsightsPage';
+import { InboxPage } from './pages/InboxPage';
 import { ServerStore } from './store/ServerStore';
 import { useTerrain } from './store/useTerrain';
 import { MemoryTerrain, ServerTerrain } from './lib/terrain';
@@ -69,11 +76,18 @@ function StandaloneApp() {
 }
 
 function HostedApp() {
-  const { status, load, mustChangePassword } = useSession();
+  const { status, load, mustChangePassword, user } = useSession();
   const route = useRoute((s) => s.route);
   useEffect(() => {
     if (status === 'unknown') void load();
   }, [status, load]);
+  // Tasks stay live for the whole signed-in session, on the same socket as the open case.
+  const tasksFor = status === 'authed' && !mustChangePassword && user ? user : null;
+  useEffect(() => {
+    if (!tasksFor) return;
+    useTasks.getState().start({ id: tasksFor.id, name: tasksFor.displayName });
+    return () => useTasks.getState().stop();
+  }, [tasksFor]);
   if (status === 'unknown') return <div className="empty">Loading…</div>;
   if (status === 'anon') return <LoginPage />;
   if (mustChangePassword || route.kind === 'password') return <ChangePasswordPage />;
@@ -82,6 +96,16 @@ function HostedApp() {
       return <UsersPage />;
     case 'tokens':
       return <TokensPage />;
+    case 'tasks':
+      return <TasksPage viewId={route.viewId} taskNum={route.taskNum} />;
+    case 'insights':
+      return <InsightsPage />;
+    case 'teams':
+      return <TeamsPage />;
+    case 'playbooks':
+      return <PlaybooksPage />;
+    case 'inbox':
+      return <InboxPage tab={route.tab} />;
     case 'case':
       return <HostedCase caseId={route.caseId} history={route.view === 'history'} />;
     default:
@@ -174,6 +198,7 @@ export function CaseShell({ history = false }: { history?: boolean }) {
         </main>
       </div>
       <ModalRoot />
+      <NewTaskHost />
       <Toasts />
     </div>
   );

@@ -63,21 +63,23 @@ mode, but a /16 scan still writes a few hundred megabytes.
 
 Everything is an environment variable. All of them are optional except where noted.
 
-| Variable                                      | Default   | What it does                                                                                                                   |
-| --------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `MIDDEN_PORT`                                 | `8080`    | Listening port                                                                                                                 |
-| `MIDDEN_HOST`                                 | `0.0.0.0` | Listening address                                                                                                              |
-| `MIDDEN_DATA`                                 | `/data`   | Database, blobs and temp files                                                                                                 |
-| `MIDDEN_PUBLIC_ORIGIN`                        | none      | Public URL, e.g. `https://midden.corp.example`. Used for WebSocket origin checks and the OIDC redirect. Set it behind a proxy. |
-| `MIDDEN_TRUST_PROXY`                          | `false`   | Trust `X-Forwarded-*`. Turn on behind a reverse proxy.                                                                         |
-| `MIDDEN_OPEN_CASES`                           | `true`    | Every analyst can edit every case. Turn off to make new cases members-only.                                                    |
-| `MIDDEN_ADMIN_USER` / `MIDDEN_ADMIN_PASSWORD` | none      | Seeds the first admin. Only used when there are no users.                                                                      |
-| `MIDDEN_ARGON2_MEMORY_KIB`                    | `65536`   | Password hashing cost. Lower on small boards.                                                                                  |
-| `MIDDEN_MAX_UPLOAD_MB`                        | `25`      | Largest single scan or attachment                                                                                              |
-| `MIDDEN_CASE_QUOTA_MB`                        | `2048`    | Total attachment bytes per case                                                                                                |
-| `MIDDEN_LOGIN_RATE_LIMIT`                     | `30`      | Login attempts per minute per IP                                                                                               |
-| `MIDDEN_TLS_CERT` / `MIDDEN_TLS_KEY`          | none      | Serve HTTPS directly, for a hunt LAN with no proxy in front                                                                    |
-| `MIDDEN_LOG_LEVEL`                            | `info`    | pino level                                                                                                                     |
+| Variable                                      | Default   | What it does                                                                                                                                                                                                                |
+| --------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MIDDEN_PORT`                                 | `8080`    | Listening port                                                                                                                                                                                                              |
+| `MIDDEN_HOST`                                 | `0.0.0.0` | Listening address                                                                                                                                                                                                           |
+| `MIDDEN_DATA`                                 | `/data`   | Database, blobs and temp files                                                                                                                                                                                              |
+| `MIDDEN_PUBLIC_ORIGIN`                        | none      | Public URL, e.g. `https://midden.corp.example`. Used for WebSocket origin checks and the OIDC redirect. Set it behind a proxy.                                                                                              |
+| `MIDDEN_TRUST_PROXY`                          | `false`   | Trust `X-Forwarded-*`. Turn on behind a reverse proxy.                                                                                                                                                                      |
+| `MIDDEN_OPEN_CASES`                           | `true`    | Every analyst can edit every case. Turn off to make new cases members-only.                                                                                                                                                 |
+| `MIDDEN_ADMIN_USER` / `MIDDEN_ADMIN_PASSWORD` | none      | Seeds the first admin. Only used when there are no users.                                                                                                                                                                   |
+| `MIDDEN_ARGON2_MEMORY_KIB`                    | `65536`   | Password hashing cost. Lower on small boards.                                                                                                                                                                               |
+| `MIDDEN_MAX_UPLOAD_MB`                        | `25`      | Largest single scan or attachment                                                                                                                                                                                           |
+| `MIDDEN_CASE_QUOTA_MB`                        | `2048`    | Total attachment bytes per case                                                                                                                                                                                             |
+| `MIDDEN_LOGIN_RATE_LIMIT`                     | `30`      | Login attempts per minute per IP                                                                                                                                                                                            |
+| `MIDDEN_WEBHOOK_ALLOWED_HOSTS`                | none      | Chat hosts task webhooks may post to, comma-separated: `chat.corp.example`, `chat.corp.example:3000`, `*.corp.example`. Webhooks are off while it is empty. Set `MIDDEN_PUBLIC_ORIGIN` too, so messages link back to tasks. |
+| `MIDDEN_METRICS`                              | `off`     | `token` serves Prometheus metrics at `/api/metrics` to an admin's API token. See [Metrics](metrics.md).                                                                                                                     |
+| `MIDDEN_TLS_CERT` / `MIDDEN_TLS_KEY`          | none      | Serve HTTPS directly, for a hunt LAN with no proxy in front                                                                                                                                                                 |
+| `MIDDEN_LOG_LEVEL`                            | `info`    | pino level                                                                                                                                                                                                                  |
 
 ## HTTPS
 
@@ -169,7 +171,9 @@ without losing history.
 
 `GET /api/health` returns version, Node and SQLite versions, whether argon2 is available, and
 free space on the data volume. The container healthcheck already polls it. Logs are JSON
-(pino) on stdout.
+(pino) on stdout, with one `task change` line per change to tasks.
+
+For dashboards and alerts, turn on [Prometheus metrics](metrics.md) with `MIDDEN_METRICS=token`.
 
 ## Connecting other tools
 

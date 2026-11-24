@@ -12,6 +12,19 @@ import {
   HostSchema,
   OpSchema,
   ScanMetaSchema,
+  StatusCategorySchema,
+  WorkflowStatusSchema,
+  TaskCommentSchema,
+  TaskOpSchema,
+  TaskRunSchema,
+  TaskSchema,
+  TaskStateSchema,
+  TaskViewConfigSchema,
+  WorkflowSchema,
+  GRID_KINDS,
+  NOTIFY_KINDS,
+  NotifyPrefsPatchSchema,
+  WEBHOOK_EVENTS,
 } from '@midden/core';
 import { CreateTokenBody } from '../auth/tokenRoutes.js';
 import { tokenMayUse } from '../auth/tokens.js';
@@ -25,9 +38,43 @@ import {
   SubmitOp,
 } from '../cases/routes.js';
 import { HostsQuery, MapQuery } from '../terrain/routes.js';
+import {
+  CommentBody,
+  CreateRun,
+  CreateTask,
+  PatchRun,
+  PatchTask,
+  PutWorkflow,
+  TaskListQuery,
+} from '../tasks/routes.js';
+import { CreateTeam, PatchTeam, TeamMemberBody } from '../teams/routes.js';
+import { CreateTaskView, PatchTaskView } from '../tasks/viewRoutes.js';
+import {
+  CreatePlaybook,
+  ExportQuery,
+  ImportQuery,
+  ImportTasks,
+  PatchPlaybook,
+  SaveRunAsPlaybook,
+} from '../tasks/playbookRoutes.js';
+import { CreateWebhook, MarkRead, NotificationQuery, PatchWebhook } from '../notify/routes.js';
+import { InsightsQuery } from '../tasks/insights.js';
 
 /** The version of the API contract, which is independent of the product's release number. */
 export const API_VERSION = '1.0.0';
+
+const WebhookDeliverySchema = z.object({
+  id: z.string(),
+  event: z.string().meta({ description: 'Comma-separated events, or `test`.' }),
+  status: z.enum(['pending', 'ok', 'failed']),
+  attempts: z.number().int(),
+  nextAttemptAt: z.string().nullable(),
+  lastStatus: z.number().int().nullable(),
+  lastError: z.string(),
+  createdAt: z.string(),
+  deliveredAt: z.string().nullable(),
+  payload: z.unknown().meta({ description: 'The Rocket.Chat message that was sent.' }),
+});
 
 const named = {
   Error: z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
@@ -129,12 +176,230 @@ const named = {
   CreateUser,
   PatchUser,
   CreateToken: CreateTokenBody,
+  Team: z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    createdAt: z.string(),
+    members: z.array(
+      z.object({
+        userId: z.string(),
+        role: z.enum(['lead', 'member']),
+        username: z.string(),
+        displayName: z.string(),
+      }),
+    ),
+  }),
+  Task: TaskSchema.extend({
+    ref: z.string().meta({ description: 'The task number as people say it, e.g. `T-12`.' }),
+    category: StatusCategorySchema,
+    statusName: z.string(),
+  }),
+  TaskBrief: z.object({
+    id: z.string(),
+    ref: z.string(),
+    title: z.string(),
+    category: StatusCategorySchema,
+  }),
+  TaskComment: TaskCommentSchema,
+  TaskRun: TaskRunSchema.extend({
+    counts: z.record(StatusCategorySchema, z.number().int()),
+    total: z.number().int(),
+  }),
+  Workflow: WorkflowSchema,
+  TaskOp: TaskOpSchema,
+  TaskState: TaskStateSchema,
+  TaskOpRecord: z.object({
+    seq: z.number().int(),
+    ts: z.string(),
+    actor: z.object({ id: z.string(), name: z.string() }),
+    via: z.string().nullable(),
+    type: z.string(),
+    get op() {
+      return TaskOpSchema;
+    },
+    get inverse() {
+      return TaskOpSchema.nullable();
+    },
+    clientOpId: z.string().nullable(),
+    baseSeq: z.number().int().nullable(),
+  }),
+  CreateTeam,
+  PatchTeam,
+  TeamMember: TeamMemberBody,
+  CreateTask,
+  PatchTask,
+  Comment: CommentBody,
+  CreateRun,
+  PatchRun,
+  PutWorkflow,
+  TaskView: z.object({
+    id: z.string(),
+    name: z.string(),
+    ownerId: z.string(),
+    teamId: z
+      .string()
+      .meta({ description: 'The team it is shared with; empty for a personal view.' }),
+    builtIn: z.boolean(),
+    config: TaskViewConfigSchema,
+  }),
+  CreateTaskView,
+  PatchTaskView,
+  Playbook: z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    teamId: z.string().meta({ description: 'Empty for a playbook every team can use.' }),
+    statuses: z
+      .array(WorkflowStatusSchema)
+      .nullable()
+      .meta({ description: 'Workflow for runs started from it; null uses the default.' }),
+    version: z.number().int().meta({ description: 'Goes up when the CSV or workflow changes.' }),
+    rows: z.number().int().meta({ description: 'Tasks in the CSV.' }),
+    createdBy: z.string(),
+    createdAt: z.string(),
+    updatedBy: z.string(),
+    updatedAt: z.string(),
+  }),
+  CreatePlaybook,
+  PatchPlaybook,
+  SaveRunAsPlaybook,
+  ImportTasks,
+  ImportIssue: z.object({
+    line: z.number().int().meta({ description: '0 for problems with the file as a whole.' }),
+    severity: z.enum(['error', 'warning']),
+    message: z.string(),
+  }),
+  Notification: z.object({
+    id: z.string(),
+    kind: z.enum(NOTIFY_KINDS).meta({ description: 'The most important of `kinds`.' }),
+    kinds: z.array(z.enum(NOTIFY_KINDS)),
+    tasks: z
+      .array(z.object({ id: z.string(), num: z.number().int(), title: z.string() }))
+      .meta({ description: 'Only tasks you can still see.' }),
+    actors: z.array(z.object({ id: z.string(), name: z.string() })),
+    comments: z.array(z.object({ id: z.string(), taskId: z.string(), excerpt: z.string() })),
+    count: z.number().int().meta({ description: 'Changes folded into this notification.' }),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    read: z.boolean(),
+  }),
+  NotifyPrefs: z.object({
+    grid: z
+      .record(
+        z.enum(GRID_KINDS),
+        z.object({
+          assignee: z.boolean(),
+          follower: z.boolean(),
+          creator: z.boolean(),
+          approver: z.boolean(),
+        }),
+      )
+      .meta({ description: 'What happened × how you are related to the task.' }),
+    queue: z.boolean().meta({ description: "Tell me about new tasks in my teams' queues." }),
+    autoFollow: z.object({
+      created: z.boolean(),
+      assigned: z.boolean(),
+      commented: z.boolean(),
+      approver: z.boolean(),
+    }),
+  }),
+  NotifyPrefsPatch: NotifyPrefsPatchSchema,
+  MarkRead,
+  WebhookDelivery: WebhookDeliverySchema,
+  TaskInsights: (() => {
+    const taskRef = { id: z.string(), num: z.number().int(), title: z.string() };
+    const duration = z.object({
+      count: z.number().int(),
+      medianSec: z.number().nullable(),
+      p90Sec: z.number().nullable(),
+    });
+    const cat = z.enum(['backlog', 'todo', 'in_progress', 'blocked', 'done', 'cancelled']);
+    return z.object({
+      now: z.string(),
+      from: z.string(),
+      to: z.string(),
+      open: z.object({
+        total: z.number().int(),
+        byCategory: z.record(cat, z.number().int()).meta({
+          description: 'Every task that is not archived, open or not, by status category.',
+        }),
+        overdue: z.number().int(),
+        unassigned: z.number().int().meta({ description: 'Open, with no one and no team queue.' }),
+      }),
+      queues: z.array(
+        z.object({ teamId: z.string(), open: z.number().int(), oldestAt: z.string() }),
+      ),
+      people: z.array(
+        z.object({
+          userId: z.string(),
+          open: z.number().int(),
+          inProgress: z.number().int(),
+          blocked: z.number().int(),
+          overdue: z.number().int(),
+        }),
+      ),
+      throughput: z
+        .array(z.object({ week: z.string(), created: z.number().int(), done: z.number().int() }))
+        .meta({ description: 'One entry per week, starting Mondays (UTC).' }),
+      cycle: duration.meta({
+        description: 'First in progress to done, for tasks done in the window.',
+      }),
+      lead: duration.meta({ description: 'Created to done, for tasks done in the window.' }),
+      stuck: z.array(
+        z.object({
+          ...taskRef,
+          statusId: z.string(),
+          category: cat,
+          since: z.string(),
+          assignees: z.array(z.string()),
+        }),
+      ),
+      approvals: z.array(z.object({ ...taskRef, approverId: z.string(), since: z.string() })),
+      burndown: z
+        .object({
+          runId: z.string(),
+          points: z.array(
+            z.object({ date: z.string(), total: z.number().int(), open: z.number().int() }),
+          ),
+        })
+        .nullable(),
+    });
+  })(),
+  Webhook: z.object({
+    id: z.string(),
+    teamId: z.string().meta({ description: 'Empty for a webhook that hears about every task.' }),
+    name: z.string(),
+    url: z.string().meta({ description: 'Masked; the full URL is never returned.' }),
+    events: z.array(z.enum(WEBHOOK_EVENTS)),
+    enabled: z.boolean(),
+    createdBy: z.string(),
+    createdAt: z.string(),
+    updatedBy: z.string(),
+    updatedAt: z.string(),
+    last: WebhookDeliverySchema.nullable(),
+  }),
+  CreateWebhook,
+  PatchWebhook,
 };
 
 /** Response schemas, exported so the tests can hold real responses to them. */
 export const responseSchemas = named;
 
-type Tag = 'Meta' | 'Auth' | 'Tokens' | 'Users' | 'Admin' | 'Cases' | 'History' | 'Scans' | 'Files';
+type Tag =
+  | 'Meta'
+  | 'Auth'
+  | 'Tokens'
+  | 'Users'
+  | 'Admin'
+  | 'Cases'
+  | 'History'
+  | 'Scans'
+  | 'Files'
+  | 'Teams'
+  | 'Tasks'
+  | 'Notifications'
+  | 'Webhooks';
 
 interface RouteDoc {
   method: 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -156,6 +421,18 @@ interface RouteDoc {
 const ref = (name: keyof typeof named) => named[name];
 const CASE = '/api/cases/{id}';
 const SCAN = `${CASE}/scans/{scanId}`;
+const TASK = '/api/tasks/{id}';
+const SUBMITTED = z.object({
+  seq: z.number().int(),
+  overwrote: z.array(
+    z.object({
+      field: z.string(),
+      bySeq: z.number().int(),
+      byActor: z.object({ id: z.string(), name: z.string() }),
+    }),
+  ),
+  duplicate: z.boolean(),
+});
 
 const routes: RouteDoc[] = [
   {
@@ -593,6 +870,466 @@ const routes: RouteDoc[] = [
     summary: 'Delete an attachment',
     response: ref('Ok'),
   },
+
+  {
+    method: 'get',
+    path: '/api/teams',
+    tag: 'Teams',
+    summary: 'List teams and their members',
+    response: z.object({ teams: z.array(ref('Team')) }),
+  },
+  {
+    method: 'post',
+    path: '/api/teams',
+    tag: 'Teams',
+    summary: 'Create a team (admin)',
+    body: 'CreateTeam',
+    status: 201,
+    response: z.object({ team: ref('Team') }),
+  },
+  {
+    method: 'patch',
+    path: '/api/teams/{id}',
+    tag: 'Teams',
+    summary: 'Rename or describe a team (admin)',
+    body: 'PatchTeam',
+    response: z.object({ team: ref('Team') }),
+  },
+  {
+    method: 'delete',
+    path: '/api/teams/{id}',
+    tag: 'Teams',
+    summary: 'Delete a team (admin)',
+    description: 'Tasks keep their team id and show it as a deleted team.',
+    response: ref('Ok'),
+  },
+  {
+    method: 'put',
+    path: '/api/teams/{id}/members/{userId}',
+    tag: 'Teams',
+    summary: 'Add a member or change their role',
+    description:
+      'Admins may do anything. A lead of the team may add and remove members, but not leads.',
+    body: 'TeamMember',
+    response: z.object({ team: ref('Team') }),
+  },
+  {
+    method: 'delete',
+    path: '/api/teams/{id}/members/{userId}',
+    tag: 'Teams',
+    summary: 'Remove a member',
+    response: z.object({ team: ref('Team') }),
+  },
+
+  {
+    method: 'get',
+    path: '/api/task-views',
+    tag: 'Tasks',
+    summary: 'List your saved views and those shared with your teams',
+    description:
+      'Built-in views (My tasks, Everyone’s tasks, …) are part of the web client and not listed.',
+    response: z.object({ views: z.array(ref('TaskView')) }),
+  },
+  {
+    method: 'post',
+    path: '/api/task-views',
+    tag: 'Tasks',
+    summary: 'Save a view',
+    description: 'Give a `teamId` to share it with a team; only that team’s leads and admins may.',
+    body: 'CreateTaskView',
+    status: 201,
+    response: z.object({ view: ref('TaskView') }),
+  },
+  {
+    method: 'patch',
+    path: '/api/task-views/{id}',
+    tag: 'Tasks',
+    summary: 'Change a saved view',
+    description: 'Its owner may change a personal view; a lead of the team, a shared one.',
+    body: 'PatchTaskView',
+    response: z.object({ view: ref('TaskView') }),
+  },
+  {
+    method: 'delete',
+    path: '/api/task-views/{id}',
+    tag: 'Tasks',
+    summary: 'Delete a saved view',
+    response: ref('Ok'),
+  },
+
+  {
+    method: 'get',
+    path: '/api/tasks',
+    tag: 'Tasks',
+    summary: 'Find tasks',
+    description:
+      'Newest first. Tasks linked to a restricted case are left out unless you can read that case.',
+    query: TaskListQuery,
+    response: z.object({
+      tasks: z.array(ref('Task')),
+      total: z.number().int(),
+      seq: z.number().int(),
+    }),
+  },
+  {
+    method: 'post',
+    path: '/api/tasks',
+    tag: 'Tasks',
+    summary: 'Create a task',
+    body: 'CreateTask',
+    status: 201,
+    response: z.object({ task: ref('Task'), seq: z.number().int() }),
+  },
+  {
+    method: 'get',
+    path: '/api/tasks/state',
+    tag: 'Tasks',
+    summary: 'Every task, comment, run and workflow you can see',
+    response: z.object({ seq: z.number().int(), state: ref('TaskState') }),
+  },
+  {
+    method: 'get',
+    path: TASK,
+    tag: 'Tasks',
+    summary: 'A task with its comments and dependencies',
+    description: 'The id may also be a task number: `T-12` or `12`.',
+    response: z.object({
+      task: ref('Task'),
+      comments: z.array(ref('TaskComment')),
+      blockedBy: z.array(ref('TaskBrief')),
+      blocking: z.array(ref('TaskBrief')),
+    }),
+  },
+  {
+    method: 'patch',
+    path: TASK,
+    tag: 'Tasks',
+    summary: 'Change a task',
+    description:
+      'Moving a task to a done status fails while its approver has not approved it. Changing who is assigned here affects one task, so it needs no lead.',
+    body: 'PatchTask',
+    response: z.object({ task: ref('Task'), seq: z.number().int() }),
+  },
+  {
+    method: 'post',
+    path: `${TASK}/comments`,
+    tag: 'Tasks',
+    summary: 'Comment on a task',
+    body: 'Comment',
+    status: 201,
+    response: z.object({ comment: ref('TaskComment'), seq: z.number().int() }),
+  },
+  {
+    method: 'get',
+    path: `${TASK}/history`,
+    tag: 'Tasks',
+    summary: "A task's history",
+    response: z.object({ ops: z.array(ref('TaskOpRecord')) }),
+  },
+  {
+    method: 'get',
+    path: '/api/tasks/ops',
+    tag: 'Tasks',
+    summary: 'The task operation log',
+    description: 'Operations touching a task you cannot see are left out.',
+    query: z.object({
+      after: z.coerce.number().int().optional().meta({ description: 'Return ops after this seq.' }),
+      before: z.coerce
+        .number()
+        .int()
+        .optional()
+        .meta({ description: 'Return the newest ops before this seq.' }),
+      limit: z.coerce.number().int().min(1).max(2000).default(200),
+    }),
+    response: z.object({ ops: z.array(ref('TaskOpRecord')), seq: z.number().int() }),
+  },
+  {
+    method: 'post',
+    path: '/api/tasks/ops',
+    tag: 'Tasks',
+    summary: 'Submit a task operation',
+    description:
+      'Takes any client operation from `TaskOpSchema`. Assigning more than one task in one operation takes a team lead or an admin. Send a `clientOpId` so a retry cannot apply twice.',
+    body: 'SubmitOp',
+    response: SUBMITTED,
+  },
+  {
+    method: 'post',
+    path: '/api/tasks/revert',
+    tag: 'Tasks',
+    summary: 'Undo a task operation',
+    description: 'Applies the recorded inverse of that operation as a new one.',
+    body: 'Revert',
+    response: SUBMITTED,
+  },
+  {
+    method: 'get',
+    path: '/api/task-runs',
+    tag: 'Tasks',
+    summary: 'List runs (playbook instances) with progress',
+    response: z.object({ runs: z.array(ref('TaskRun')) }),
+  },
+  {
+    method: 'post',
+    path: '/api/task-runs',
+    tag: 'Tasks',
+    summary: 'Start a run (team lead or admin)',
+    description:
+      'The run gets its own copy of a workflow, so its statuses can change without affecting others.',
+    body: 'CreateRun',
+    status: 201,
+    response: z.object({ run: ref('TaskRun'), seq: z.number().int() }),
+  },
+  {
+    method: 'patch',
+    path: '/api/task-runs/{id}',
+    tag: 'Tasks',
+    summary: 'Rename, move or close a run (team lead or admin)',
+    body: 'PatchRun',
+    response: z.object({ run: ref('TaskRun'), seq: z.number().int() }),
+  },
+  {
+    method: 'get',
+    path: '/api/playbooks',
+    tag: 'Tasks',
+    summary: 'List playbooks',
+    description:
+      'Every signed-in user can read playbooks. The CSV itself comes with `GET /api/playbooks/{id}`.',
+    response: z.object({ playbooks: z.array(ref('Playbook')) }),
+  },
+  {
+    method: 'post',
+    path: '/api/playbooks',
+    tag: 'Tasks',
+    summary: 'Save a playbook (team lead or admin)',
+    description:
+      'The CSV is checked for errors in the file itself; names of people, teams and cases are only resolved when a run is started from it. A playbook with no team takes an admin.',
+    body: 'CreatePlaybook',
+    status: 201,
+    response: z.object({ playbook: ref('Playbook') }),
+  },
+  {
+    method: 'get',
+    path: '/api/playbooks/{id}',
+    tag: 'Tasks',
+    summary: 'Get a playbook with its CSV',
+    response: z.object({ playbook: named.Playbook.extend({ csv: z.string() }) }),
+  },
+  {
+    method: 'patch',
+    path: '/api/playbooks/{id}',
+    tag: 'Tasks',
+    summary: 'Change a playbook (team lead or admin)',
+    body: 'PatchPlaybook',
+    response: z.object({ playbook: ref('Playbook') }),
+  },
+  {
+    method: 'delete',
+    path: '/api/playbooks/{id}',
+    tag: 'Tasks',
+    summary: 'Delete a playbook (team lead or admin)',
+    description: 'Runs started from it keep their tasks.',
+    response: ref('Ok'),
+  },
+  {
+    method: 'post',
+    path: '/api/task-runs/{id}/playbook',
+    tag: 'Tasks',
+    summary: 'Save a run as a playbook (team lead or admin)',
+    description:
+      "Due dates become offsets from the run's start, and by default statuses, ticks and assignees are cleared so the next hunt starts fresh. Case links are dropped, and tasks linked to a restricted case are left out (`skipped`), since a playbook is shared with the whole team.",
+    body: 'SaveRunAsPlaybook',
+    status: 201,
+    response: z.object({ playbook: ref('Playbook'), skipped: z.number().int() }),
+  },
+  {
+    method: 'post',
+    path: '/api/tasks/import',
+    tag: 'Tasks',
+    summary: 'Import tasks from CSV or a playbook (team lead or admin)',
+    description:
+      "Starts a run (`run`) or adds to one (`runId`), as a single operation that undoes in one step. With `?preview=1` nothing changes: the response lists the tasks as they would be created and every problem found, including the ones the permission checks would raise. Status names the run's workflow lacks are listed in `unknownStatuses`; pass them back in `addStatuses` to add them. See the CSV format in the guide.",
+    query: ImportQuery,
+    body: 'ImportTasks',
+    status: 201,
+    response: z.union([
+      z.object({
+        run: ref('TaskRun'),
+        created: z.number().int(),
+        warnings: z.array(ref('ImportIssue')),
+        seq: z.number().int(),
+      }),
+      z.object({
+        ok: z.boolean(),
+        issues: z.array(ref('ImportIssue')),
+        unknownStatuses: z.array(z.string()),
+        run: z.object({
+          id: z.string(),
+          name: z.string(),
+          teamId: z.string(),
+          startDate: z.string(),
+        }),
+        workflow: z.object({ name: z.string(), statuses: z.array(WorkflowStatusSchema) }),
+        tasks: z.array(
+          z.object({
+            line: z.number().int(),
+            key: z.string(),
+            title: z.string(),
+            status: z.string(),
+            category: StatusCategorySchema,
+            priority: z.string(),
+            assignees: z.array(z.string()),
+            team: z.string(),
+            labels: z.array(z.string()),
+            dueAt: z.string(),
+            blockedBy: z.array(z.string()),
+            checklist: z.number().int(),
+            approver: z.string(),
+            case: z.string(),
+          }),
+        ),
+      }),
+    ]),
+  },
+  {
+    method: 'get',
+    path: '/api/tasks/export',
+    tag: 'Tasks',
+    summary: 'Export tasks as CSV',
+    description:
+      "Takes the same filters as `GET /api/tasks` and writes the import format, so an export can be imported again. Cells that start with `= + - @` get a leading `'` so spreadsheets do not run them as formulas; import removes it.",
+    query: ExportQuery,
+    response: { contentType: 'text/csv', description: 'The tasks in the playbook CSV format.' },
+  },
+  {
+    method: 'get',
+    path: '/api/workflows',
+    tag: 'Tasks',
+    summary: 'List workflows',
+    response: z.object({ workflows: z.array(ref('Workflow')), defaultWorkflowId: z.string() }),
+  },
+  {
+    method: 'put',
+    path: '/api/workflows/{id}',
+    tag: 'Tasks',
+    summary: 'Create or replace a workflow',
+    description:
+      "The default workflow takes an admin; a run's workflow takes a lead of the run's team. Every task must still have a status in its workflow afterwards.",
+    body: 'PutWorkflow',
+    response: z.object({ workflow: ref('Workflow'), seq: z.number().int() }),
+  },
+  {
+    method: 'get',
+    path: '/api/tasks/insights',
+    tag: 'Tasks',
+    summary: 'Open work, throughput, cycle time and what is stuck',
+    description:
+      'Counted over the tasks you can see: a task linked to a restricted case you cannot read is left out of every number. Archived tasks count toward throughput and cycle time but not open work. Give `run` for its burndown.',
+    query: InsightsQuery,
+    response: z.object({ insights: ref('TaskInsights') }),
+  },
+  {
+    method: 'get',
+    path: '/api/metrics',
+    tag: 'Meta',
+    summary: 'Prometheus metrics',
+    description:
+      'Off unless the server sets `MIDDEN_METRICS=token`; then it needs an API token belonging to an admin (read-only is enough). Text exposition format 0.0.4. Labels name status categories and teams, never people, cases or tasks. See the metrics guide.',
+    response: { contentType: 'text/plain', description: 'Prometheus text format.' },
+  },
+  {
+    method: 'get',
+    path: '/api/notifications',
+    tag: 'Notifications',
+    summary: 'Your notifications, newest first',
+    description:
+      'Changes to one task within two minutes fold into one unread notification, and a bulk change is one notification listing every task. Tasks you can no longer see drop out, and a notification left with none is not listed or counted. Page with `before` set to the last `updatedAt`.',
+    query: NotificationQuery,
+    response: z.object({ notifications: z.array(ref('Notification')), unread: z.number().int() }),
+  },
+  {
+    method: 'post',
+    path: '/api/notifications/read',
+    tag: 'Notifications',
+    summary: 'Mark notifications read',
+    body: 'MarkRead',
+    response: z.object({ unread: z.number().int() }),
+  },
+  {
+    method: 'get',
+    path: '/api/notifications/prefs',
+    tag: 'Notifications',
+    summary: 'Your notification preferences',
+    description:
+      'Being assigned, @mentioned or asked to approve always notifies you; the grid covers everything else. Your own changes never notify you.',
+    response: z.object({ prefs: ref('NotifyPrefs'), defaults: ref('NotifyPrefs') }),
+  },
+  {
+    method: 'patch',
+    path: '/api/notifications/prefs',
+    tag: 'Notifications',
+    summary: 'Change your notification preferences',
+    description: 'Send only what changes; everything else keeps its value.',
+    body: 'NotifyPrefsPatch',
+    response: z.object({ prefs: ref('NotifyPrefs') }),
+  },
+  {
+    method: 'get',
+    path: '/api/webhooks',
+    tag: 'Webhooks',
+    summary: 'Webhooks you manage',
+    description:
+      "Admins see every webhook; team leads see their teams'. `allowedHosts` is the server's MIDDEN_WEBHOOK_ALLOWED_HOSTS: webhooks can only post there, and are off when it is empty.",
+    response: z.object({
+      webhooks: z.array(ref('Webhook')),
+      allowedHosts: z.array(z.string()),
+      origin: z.string().nullable(),
+    }),
+  },
+  {
+    method: 'post',
+    path: '/api/webhooks',
+    tag: 'Webhooks',
+    summary: 'Add a webhook (team lead or admin)',
+    description:
+      "Posts Rocket.Chat incoming-webhook messages (Slack and Mattermost accept them too). A team's webhook hears about tasks on that team or in its runs; one with no team (admins only) hears about every task. Tasks linked to a restricted case are described by number only.",
+    body: 'CreateWebhook',
+    status: 201,
+    response: z.object({ webhook: ref('Webhook') }),
+  },
+  {
+    method: 'patch',
+    path: '/api/webhooks/{id}',
+    tag: 'Webhooks',
+    summary: 'Change a webhook',
+    description: 'Leave out `url` to keep the current one.',
+    body: 'PatchWebhook',
+    response: z.object({ webhook: ref('Webhook') }),
+  },
+  {
+    method: 'delete',
+    path: '/api/webhooks/{id}',
+    tag: 'Webhooks',
+    summary: 'Delete a webhook',
+    response: ref('Ok'),
+  },
+  {
+    method: 'post',
+    path: '/api/webhooks/{id}/test',
+    tag: 'Webhooks',
+    summary: 'Send a test message now',
+    description: 'Waits for the attempt and returns it. A failed test is not retried.',
+    response: z.object({ delivery: ref('WebhookDelivery') }),
+  },
+  {
+    method: 'get',
+    path: '/api/webhooks/{id}/deliveries',
+    tag: 'Webhooks',
+    summary: 'Recent deliveries',
+    description:
+      'The last 50, newest first. Failed sends are retried after 30 s, 2 min, 10 min, 30 min and 2 h, then marked failed.',
+    response: z.object({ deliveries: z.array(ref('WebhookDelivery')) }),
+  },
 ];
 
 /** What kind of token, if any, may call a route. Read from the rule that enforces it. */
@@ -761,6 +1498,17 @@ export function openApiDocument(): Json {
       { name: 'History', description: 'The operation log: how a case changes.' },
       { name: 'Scans', description: 'Uploaded nmap scans and the terrain they map.' },
       { name: 'Files', description: 'Evidence attached to events and hosts.' },
+      { name: 'Teams', description: 'Analyst teams and their leads.' },
+      { name: 'Tasks', description: 'Task management, outside cases: tasks, runs and workflows.' },
+      {
+        name: 'Notifications',
+        description: 'Your inbox and what you are told about. Browser sessions only.',
+      },
+      {
+        name: 'Webhooks',
+        description:
+          'Chat messages (Rocket.Chat format) about task changes, per team or for every task.',
+      },
     ],
     paths,
     components: {

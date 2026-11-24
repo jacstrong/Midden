@@ -3,6 +3,7 @@ import { CONFIDENCE, distinctUsers, humanSpan, TACTICS, type TzMode } from '@mid
 import { useCaseStore } from '../store/useCaseStore';
 import { useUiStore } from '../store/useUiStore';
 import { useSortedEvents, useTotals } from '../lib/selectors';
+import { CaseTasks } from '../tasks/CaseTasks';
 
 export function Sidebar() {
   const hosts = useCaseStore((s) => s.state.hosts);
@@ -24,6 +25,7 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar" id="sidebar">
+      <CaseTasks />
       <div>
         <div className="sbtitle">Case totals</div>
         <div className="stats">

@@ -8,6 +8,7 @@ import { exportCsv } from '../lib/caseActions';
 import { trunc } from '../lib/format';
 import { ConfDot, HostCell, IndCell, TacticCell, Tag } from '../components/cells';
 import { EmptyState } from './EmptyState';
+import { RefText } from '../tasks/shared';
 
 const SEV = byId(SEVERITY);
 const HEAD = ['', 'Time', 'Host', 'Account', 'Tactic', 'Activity', 'Indicator', 'Confidence', ''];
@@ -163,7 +164,9 @@ export function TimelineView({ scrollRef }: { scrollRef: React.RefObject<HTMLDiv
                         {e.notes && (
                           <>
                             <dt>Notes</dt>
-                            <dd className="wrap">{e.notes}</dd>
+                            <dd>
+                              <RefText text={e.notes} />
+                            </dd>
                           </>
                         )}
                         <dt>Timestamp</dt>

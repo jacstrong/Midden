@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useSession } from '../store/useSession';
 import { useRoute } from '../lib/router';
 import { Toasts } from './Toasts';
+import { Bell } from '../tasks/Bell';
 
 /** Shell for non-case pages in hosted mode: brand, page title, nav, sign-out. */
 export function HostedChrome({ title, children }: { title: string; children: ReactNode }) {
@@ -28,6 +29,20 @@ export function HostedChrome({ title, children }: { title: string; children: Rea
           >
             Cases
           </button>
+          <button
+            className="btn ghost"
+            onClick={() => navigate({ kind: 'tasks', viewId: 'mine', taskNum: null })}
+            data-testid="nav-tasks"
+          >
+            Tasks
+          </button>
+          <button
+            className="btn ghost"
+            onClick={() => navigate({ kind: 'teams' })}
+            data-testid="nav-teams"
+          >
+            Teams
+          </button>
           {user?.role === 'admin' && (
             <button
               className="btn ghost"
@@ -44,6 +59,7 @@ export function HostedChrome({ title, children }: { title: string; children: Rea
           >
             API tokens
           </button>
+          <Bell />
           <button className="btn ghost" onClick={() => navigate({ kind: 'password' })}>
             Password
           </button>

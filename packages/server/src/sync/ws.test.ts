@@ -255,4 +255,67 @@ describe('websocket sync', () => {
     reader.ws.close();
     writer.ws.close();
   });
+
+  it('carries tasks on the same socket as a case, and leaves a case without dropping them', async () => {
+    const a = await connect(ann, base);
+    const b = await connect(bob);
+    a.send({ t: 'hello', caseId, lastSeq: null });
+    a.send({ t: 'tasks.hello' });
+    b.send({ t: 'tasks.hello' });
+    const snap = await a.next('tasks.snapshot');
+    expect(snap.directory.users.map((u) => u.username).sort()).toEqual(['ann', 'bob', 'vic']);
+    await b.next('tasks.snapshot');
+    await a.next('snapshot');
+
+    a.send({
+      t: 'tasks.op',
+      clientOpId: 't1',
+      baseSeq: 0,
+      op: {
+        type: 'task.add',
+        task: { id: 'tk_1', title: 'Pull logs', statusId: 'st_todo', num: 99 },
+      },
+    });
+    const echo = await a.next('tasks.op');
+    // The creator auto-follows, logged with the op.
+    expect(echo).toMatchObject({ seq: 1, clientOpId: 't1' });
+    expect(echo.op).toEqual({
+      type: 'batch',
+      ops: [
+        expect.objectContaining({ type: 'task.add', task: expect.objectContaining({ num: 1 }) }),
+        expect.objectContaining({ type: 'task.follow', on: true }),
+      ],
+    });
+    expect(await a.next('tasks.ack')).toMatchObject({ clientOpId: 't1', seq: 1 });
+    expect(await b.next('tasks.op')).toMatchObject({
+      op: { type: 'batch', ops: [{ type: 'task.add', task: { title: 'Pull logs' } }, {}] },
+    });
+
+    a.send({
+      t: 'tasks.op',
+      clientOpId: 't2',
+      baseSeq: 1,
+      op: { type: 'task.drop', id: 'tk_1', nextNum: 1 },
+    });
+    expect(await a.next('tasks.reject')).toMatchObject({ clientOpId: 't2', code: 'schema' });
+
+    // leaving the case keeps the task channel
+    a.send({ t: 'leave' });
+    b.send({ t: 'hello', caseId, lastSeq: null });
+    await b.next('snapshot');
+    const pres = await b.next('presence');
+    expect(pres.users.map((u) => u.user.name)).toEqual(['BOB']);
+    b.send({
+      t: 'tasks.op',
+      clientOpId: 'b1',
+      baseSeq: 1,
+      op: { type: 'task.set', id: 'tk_1', patch: { title: 'Pull all logs' } },
+    });
+    expect(await a.next('tasks.op')).toMatchObject({
+      actor: { name: 'BOB' },
+      op: { patch: { title: 'Pull all logs' } },
+    });
+    a.close();
+    b.close();
+  });
 });

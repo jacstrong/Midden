@@ -8,6 +8,13 @@ export interface Config {
   host: string;
   dataDir: string;
   publicDir: string | null;
+  /**
+   * Hosts webhooks may post to: `chat.example.mil`, `chat.example.mil:3000` or
+   * `*.example.mil`. Empty means webhooks are off.
+   */
+  webhookAllowedHosts: string[];
+  /** `token` serves Prometheus metrics at /api/metrics to an admin's API token. */
+  metrics: 'off' | 'token';
   /** Override for the blob directory (default <dataDir>/blobs). */
   blobDir: string | null;
   logLevel: string;
@@ -73,10 +80,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxUploadMb: envInt(env, 'MIDDEN_MAX_UPLOAD_MB', 25),
     caseQuotaMb: envInt(env, 'MIDDEN_CASE_QUOTA_MB', 2048),
     loginRateLimit: envInt(env, 'MIDDEN_LOGIN_RATE_LIMIT', 30),
+    webhookAllowedHosts: (env.MIDDEN_WEBHOOK_ALLOWED_HOSTS ?? '')
+      .split(/[\s,]+/)
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
+    metrics: metricsMode(env.MIDDEN_METRICS),
     tls,
     sessionSecure:
       env.MIDDEN_SESSION_SECURE === undefined
         ? 'auto'
         : envBool(env, 'MIDDEN_SESSION_SECURE', false),
   };
+}
+
+function metricsMode(raw: string | undefined): 'off' | 'token' {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (v === '' || v === 'off') return 'off';
+  if (v === 'token') return 'token';
+  throw new Error(`MIDDEN_METRICS must be "off" or "token", got "${raw}"`);
 }

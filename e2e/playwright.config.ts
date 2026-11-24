@@ -9,7 +9,8 @@ const dataDir = process.env.MIDDEN_E2E_DATA ?? mkdtempSync(join(tmpdir(), 'midde
 /**
  * Two families of projects:
  *  - standalone-*: open the single-file build via file:// in each engine.
- *  - hosted: drive a built server (started below) in Chromium.
+ *  - hosted: drive a built server (started below) in Chromium; hosted-webkit repeats the
+ *    task management spec in WebKit.
  */
 export default defineConfig({
   testDir: './tests',
@@ -38,6 +39,15 @@ export default defineConfig({
       name: 'hosted',
       testMatch: /hosted.*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:18090' },
+      fullyParallel: false,
+      workers: 1,
+    },
+    {
+      // Task management in WebKit too, after the Chromium run so the two never share a moment.
+      name: 'hosted-webkit',
+      testMatch: /hosted-tasks\.spec\.ts/,
+      dependencies: ['hosted'],
+      use: { ...devices['Desktop Safari'], baseURL: 'http://127.0.0.1:18090' },
       fullyParallel: false,
       workers: 1,
     },

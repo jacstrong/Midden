@@ -10,6 +10,7 @@ import {
   SNAPSHOT_GAP,
   type ClientMessage,
   type PresenceEntry,
+  type RejectCode,
   type ServerMessage,
 } from '@midden/core';
 import { actorOf } from '../app.js';
@@ -136,6 +137,38 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
           });
           return;
         }
+        case 'leave':
+          leave();
+          return;
+        case 'tasks.hello':
+          app.taskChannel.join({
+            id: clientId,
+            user,
+            send: (m) => send(m),
+            close: () => socket.close(4401, 'disabled'),
+          });
+          return;
+        case 'tasks.op': {
+          const reject = (code: RejectCode, message: string): void =>
+            send({ t: 'tasks.reject', clientOpId: msg.clientOpId, code, message });
+          if (!app.taskChannel.has(clientId)) return reject('perm', 'Send tasks.hello first');
+          if (req.token?.scope === 'read') return reject('readonly', 'This API token is read-only');
+          const r = app.tasks.appendOp(opActor, msg.op, {
+            user,
+            viaToken: !!req.token,
+            clientOpId: msg.clientOpId,
+            baseSeq: msg.baseSeq,
+          });
+          if (!r.ok) return reject(r.code, r.message);
+          // The commit has already been fanned out to every client, this one included.
+          send({
+            t: 'tasks.ack',
+            clientOpId: msg.clientOpId,
+            seq: r.seq,
+            overwrote: r.overwrote.length ? r.overwrote : undefined,
+          });
+          return;
+        }
         case 'presence': {
           if (!rt) return;
           room().set(clientId, {
@@ -150,7 +183,15 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     });
-    socket.on('close', leave);
-    socket.on('error', leave);
+    app.metrics.ws++;
+    let closed = false;
+    const gone = (): void => {
+      if (!closed) app.metrics.ws--;
+      closed = true;
+      leave();
+      app.taskChannel.leave(clientId);
+    };
+    socket.on('close', gone);
+    socket.on('error', gone);
   });
 }

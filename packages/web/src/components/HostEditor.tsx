@@ -9,6 +9,7 @@ import {
   type Patch,
 } from '@midden/core';
 import { Modal } from './Modal';
+import { CreateTaskButton } from '../tasks/CaseTasks';
 import { Field } from './fields';
 import { Attachments } from './Attachments';
 import { useCaseStore } from '../store/useCaseStore';
@@ -122,15 +123,18 @@ export function HostEditor({ id, after, returnTo }: HostEditorProps) {
       head={
         !isNew &&
         canEdit && (
-          <button
-            className="btn sm mag"
-            onClick={() => {
-              closeModal();
-              deleteHost(original.id);
-            }}
-          >
-            Delete
-          </button>
+          <>
+            <CreateTaskButton hostId={original.id} title={`Investigate ${original.name}`} />
+            <button
+              className="btn sm mag"
+              onClick={() => {
+                closeModal();
+                deleteHost(original.id);
+              }}
+            >
+              Delete
+            </button>
+          </>
         )
       }
       foot={

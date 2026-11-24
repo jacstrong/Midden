@@ -24,6 +24,7 @@ import {
   type Patch,
 } from '@midden/core';
 import { Modal } from './Modal';
+import { CreateTaskButton } from '../tasks/CaseTasks';
 import { Datalist, Field, Fieldset } from './fields';
 import { Attachments } from './Attachments';
 import { useCaseStore } from '../store/useCaseStore';
@@ -270,6 +271,10 @@ export function EventEditor({ id, draft }: EventEditorProps) {
         !isNew &&
         canEdit && (
           <>
+            <CreateTaskButton
+              eventId={original.id}
+              title={`Follow up: ${(original.activity || original.indicator || 'event').slice(0, 200)}`}
+            />
             <button
               className="btn sm ghost"
               onClick={() =>

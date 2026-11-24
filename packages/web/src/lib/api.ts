@@ -16,6 +16,10 @@ let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void): void {
   onUnauthorized = fn;
 }
+/** Tell the session the server no longer knows us, as a 401 from `api` does. */
+export function notifyUnauthorized(): void {
+  onUnauthorized?.();
+}
 
 export async function api<T>(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
