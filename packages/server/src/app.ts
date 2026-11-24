@@ -26,6 +26,18 @@ import { caseRoutes } from './cases/routes.js';
 import { wsRoutes } from './sync/ws.js';
 import { adminRoutes } from './admin/routes.js';
 import { mcpRoutes } from './mcp/routes.js';
+import { TaskRuntime } from './tasks/runtime.js';
+import { TaskChannel } from './tasks/channel.js';
+import { taskRoutes } from './tasks/routes.js';
+import { teamRoutes } from './teams/routes.js';
+import { taskViewRoutes } from './tasks/viewRoutes.js';
+import { playbookRoutes } from './tasks/playbookRoutes.js';
+import { NotifyService } from './notify/service.js';
+import { WebhookService } from './notify/webhooks.js';
+import { notifyRoutes } from './notify/routes.js';
+import { insightsRoutes } from './tasks/insights.js';
+import { Metrics, metricsRoutes } from './metrics/metrics.js';
+import { changedTaskIds } from './tasks/projection.js';
 import { openApiDocument } from './openapi/spec.js';
 import type { Config } from './config.js';
 
@@ -34,6 +46,16 @@ declare module 'fastify' {
     db: Db;
     cfg: Config;
     runtimes: RuntimeRegistry;
+    /** The global task log and its in-memory state. */
+    tasks: TaskRuntime;
+    /** Live task updates to every connected browser, filtered per viewer. */
+    taskChannel: TaskChannel;
+    /** In-app notifications and due-date reminders. */
+    notify: NotifyService;
+    /** Outgoing chat webhooks and their delivery queue. */
+    webhooks: WebhookService;
+    /** Counters and gauges for `GET /api/metrics`. */
+    metrics: Metrics;
     blobs: BlobStore;
     /** Every `METHOD /api/...` route, so the API description can be checked against reality. */
     apiRoutes: string[];
@@ -46,6 +68,9 @@ declare module 'fastify' {
     token: TokenIdentity | null;
   }
 }
+
+/** How often due-date reminders are checked. */
+export const REMINDER_INTERVAL_MS = 5 * 60_000;
 
 export interface AppOptions {
   db: Db;
@@ -69,6 +94,47 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.decorate('db', db);
   app.decorate('cfg', cfg);
   app.decorate('runtimes', new RuntimeRegistry(db));
+  app.decorate('tasks', new TaskRuntime(db));
+  app.decorate('taskChannel', new TaskChannel(db, app.tasks));
+  app.decorate('metrics', new Metrics({ db, version, tasks: () => app.tasks.state }));
+  const logErr = (err: unknown): void => app.log.error(err);
+  app.tasks.onCommit((c) => {
+    try {
+      app.metrics.onTaskCommit(c);
+    } catch (err) {
+      logErr(err);
+    }
+    // One structured line per change. No titles or text: those can say more than a log should.
+    app.log.info(
+      {
+        event: 'task.op',
+        seq: c.seq,
+        op: c.op.type,
+        actorId: c.actor.id,
+        via: c.via ?? undefined,
+        tasks: changedTaskIds(c.op, c.prev, c.next).size,
+      },
+      'task change',
+    );
+  });
+  app.decorate(
+    'webhooks',
+    new WebhookService(db, {
+      allowedHosts: () => cfg.webhookAllowedHosts,
+      origin: cfg.publicOrigin,
+      log: logErr,
+      onResult: (result) => app.metrics.webhookDeliveries.inc({ result }),
+    }),
+  );
+  app.decorate(
+    'notify',
+    new NotifyService(db, app.tasks, app.taskChannel, app.tasks.prefs, {
+      onHappenings: (c, h) => app.webhooks.onCommit(c, h),
+      onOverdue: (s, t) => app.webhooks.onOverdue(s, t),
+      onStored: (kind) => app.metrics.notifications.inc({ kind }),
+      log: logErr,
+    }),
+  );
   app.decorate('blobs', new BlobStore(db, cfg.blobDir ?? joinPath(cfg.dataDir, 'blobs')));
   app.decorate('pendingIngests', new Set<Promise<unknown>>());
   app.decorate('apiRoutes', []);
@@ -79,6 +145,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   });
   app.decorateRequest('user', null);
   app.decorateRequest('token', null);
+
+  // Request counts and timings by route template, never by raw path, so ids stay out of labels.
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions.url;
+    if (route === '/api/ws') return;
+    if (route?.startsWith('/api/'))
+      app.metrics.observeHttp(req.method, route, reply.statusCode, reply.elapsedTime / 1000);
+    else if (!route && req.url.startsWith('/api/'))
+      app.metrics.observeHttp(req.method, 'unmatched', reply.statusCode, reply.elapsedTime / 1000);
+  });
 
   app.register(cookie);
   app.register(rateLimit, { global: false });
@@ -177,12 +253,37 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.register(terrainRoutes);
   app.register(attachmentRoutes);
   app.register(mcpRoutes);
+  app.register(teamRoutes);
+  app.register(taskRoutes);
+  app.register(taskViewRoutes);
+  app.register(playbookRoutes);
+  app.register(notifyRoutes);
+  app.register(insightsRoutes);
+  app.register(metricsRoutes);
 
   registerStatic(app, version);
 
+  let reminders: NodeJS.Timeout | null = null;
+  app.addHook('onReady', async () => {
+    app.webhooks.start();
+    if (cfg.metrics !== 'off') app.metrics.start();
+    reminders = setInterval(() => {
+      try {
+        app.notify.runReminders();
+      } catch (err) {
+        logErr(err);
+      }
+    }, REMINDER_INTERVAL_MS);
+    reminders.unref();
+  });
+
   app.addHook('onClose', async () => {
+    if (reminders) clearInterval(reminders);
+    app.metrics.stop();
+    await app.webhooks.stop();
     await Promise.allSettled([...app.pendingIngests]);
     app.runtimes.closeAll();
+    app.tasks.snapshot();
   });
 
   return app;

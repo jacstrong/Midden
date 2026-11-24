@@ -155,6 +155,9 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
       },
     };
     rt.appendOp(actorOf(req), meta, { canEdit: true });
+    // Live task feeds keep each viewer's list of cases; without this, a task linked to the new
+    // case would vanish for everyone but admins until they reconnected.
+    app.tasks.directoryChanged();
     reply.status(201);
     return { case: summary(app, loadCase(app, id), user) };
   });
@@ -184,8 +187,10 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
         body.archived ? nowIso() : null,
         row.id,
       );
-    if (body.restricted !== undefined)
+    if (body.restricted !== undefined) {
       app.db.run('UPDATE cases SET restricted = ? WHERE id = ?', body.restricted ? 1 : 0, row.id);
+      app.tasks.directoryChanged(); // tasks linked to this case may now be hidden or shown
+    }
     return { case: summary(app, loadCase(app, row.id), user) };
   });
 
@@ -195,6 +200,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
     loadCase(app, req.params.id);
     app.runtimes.drop(req.params.id);
     app.db.run('DELETE FROM cases WHERE id = ?', req.params.id);
+    app.tasks.directoryChanged();
     return { ok: true };
   });
 
@@ -333,6 +339,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
         req.params.userId,
         role,
       );
+      app.tasks.directoryChanged();
       return { ok: true };
     },
   );
@@ -360,6 +367,7 @@ export async function caseRoutes(app: FastifyInstance): Promise<void> {
         row.id,
         req.params.userId,
       );
+      app.tasks.directoryChanged();
       return { ok: true };
     },
   );

@@ -12,13 +12,24 @@ export type Route =
   | { kind: 'tokens' }
   | { kind: 'password' }
   | { kind: 'case'; caseId: string; view: CaseView }
+  /** A task board or table; `taskNum` opens that task's drawer over it. */
+  | { kind: 'tasks'; viewId: string; taskNum: number | null }
+  /** Counts for leads: open work, throughput, cycle time, burndown. */
+  | { kind: 'insights' }
+  | { kind: 'teams' }
+  | { kind: 'playbooks' }
+  /** Notifications, or the preferences for them. */
+  | { kind: 'inbox'; tab: 'inbox' | 'prefs' }
   | { kind: 'standalone'; view: ViewId };
 
 const isView = (v: string | undefined): v is ViewId => !!v && (VIEW_IDS as string[]).includes(v);
 const isCaseView = (v: string | undefined): v is CaseView =>
   !!v && (CASE_VIEWS as string[]).includes(v);
 
-/** Hash routes work from file:// too. Hosted: #/cases, #/c/<id>/<view>, #/users, #/login. Standalone: #/<view>. */
+/**
+ * Hash routes work from file:// too. Hosted: #/cases, #/c/<id>/<view>, #/tasks/<view>[/t/<num>], #/tasks/insights,
+ * #/teams, #/playbooks, #/inbox[/prefs], #/users, #/login. Standalone: #/<view>.
+ */
 export function parseRoute(hash: string, mode: 'server' | 'standalone'): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (mode === 'standalone')
@@ -32,6 +43,21 @@ export function parseRoute(hash: string, mode: 'server' | 'standalone'): Route {
       return { kind: 'tokens' };
     case 'password':
       return { kind: 'password' };
+    case 'teams':
+      return { kind: 'teams' };
+    case 'playbooks':
+      return { kind: 'playbooks' };
+    case 'inbox':
+      return { kind: 'inbox', tab: parts[1] === 'prefs' ? 'prefs' : 'inbox' };
+    case 'tasks': {
+      if (parts[1] === 'insights') return { kind: 'insights' };
+      // #/tasks, #/tasks/<view>, #/tasks/<view>/t/<num>, and #/tasks/t/<num> for a bare link
+      const bare = parts[1] === 't';
+      const viewId = bare ? 'mine' : parts[1] || 'mine';
+      const numPart = bare ? parts[2] : parts[2] === 't' ? parts[3] : undefined;
+      const n = numPart ? Number(numPart.replace(/^T-/i, '')) : NaN;
+      return { kind: 'tasks', viewId, taskNum: Number.isInteger(n) && n > 0 ? n : null };
+    }
     case 'c': {
       const caseId = parts[1];
       if (!caseId) return { kind: 'cases' };
@@ -56,6 +82,16 @@ export function routeHash(r: Route): string {
       return '#/password';
     case 'case':
       return `#/c/${r.caseId}/${r.view}`;
+    case 'tasks':
+      return `#/tasks/${r.viewId}` + (r.taskNum ? `/t/${r.taskNum}` : '');
+    case 'insights':
+      return '#/tasks/insights';
+    case 'teams':
+      return '#/teams';
+    case 'playbooks':
+      return '#/playbooks';
+    case 'inbox':
+      return r.tab === 'prefs' ? '#/inbox/prefs' : '#/inbox';
     case 'standalone':
       return `#/${r.view}`;
   }

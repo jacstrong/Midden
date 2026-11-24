@@ -5,6 +5,7 @@ import { useUiStore } from '../store/useUiStore';
 import { exportJson, openCaseFile } from '../lib/caseActions';
 import { PresenceStrip } from './PresenceStrip';
 import { useRoute } from '../lib/router';
+import { Bell } from '../tasks/Bell';
 
 function CommitInput({
   id,
@@ -146,6 +147,17 @@ export function TopBar() {
             />
           </>
         )}
+        {multiUser && (
+          <button
+            className="btn ghost"
+            title="Tasks"
+            onClick={() => navigate({ kind: 'tasks', viewId: 'mine', taskNum: null })}
+            data-testid="nav-tasks"
+          >
+            Tasks
+          </button>
+        )}
+        {multiUser && <Bell />}
         <button
           className="btn ghost"
           title="More"

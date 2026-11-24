@@ -6,7 +6,18 @@ import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 import { addUser, as, login, testApp } from '../test/helpers.js';
 import { PROTOCOL_VERSIONS } from './routes.js';
 
-const WRITE_TOOLS = ['add_event', 'add_host', 'revert_change', 'update_event', 'update_host'];
+const WRITE_TOOLS = [
+  'add_event',
+  'add_host',
+  'revert_change',
+  'update_event',
+  'update_host',
+  'create_task',
+  'update_task',
+  'assign_task',
+  'comment_on_task',
+  'set_checklist_item',
+];
 
 describe('the MCP endpoint', () => {
   let app: FastifyInstance;
@@ -200,6 +211,67 @@ describe('the MCP endpoint', () => {
     });
     expect((await call(agent, 'list_cases')).data.cases).toEqual([]);
     expect((await call(agent, 'list_events', { caseId })).isError).toBe(true);
+  });
+
+  it('works tasks: creates, finds, updates, assigns, comments and ticks, as the token', async () => {
+    const reader = await connect(await mint(ann, 'reader', 'read'));
+    const readNames = (await reader.listTools()).tools.map((t) => t.name);
+    expect(readNames).toEqual(
+      expect.arrayContaining([
+        'list_tasks',
+        'get_task',
+        'get_task_history',
+        'list_runs',
+        'list_teams',
+      ]),
+    );
+    expect(readNames).not.toContain('create_task');
+    expect(readNames.filter((n) => /approv/.test(n))).toEqual([]);
+
+    const agent = await connect(await mint(ann, 'triage-bot', 'write'));
+    const annId = (await app.inject({ method: 'GET', url: '/api/auth/me', ...as(ann) })).json().user
+      .id as string;
+    const made = await call(agent, 'create_task', {
+      title: 'Pull proxy logs for 203.0.113.7',
+      priority: 'high',
+      checklist: ['Export', 'Hash'],
+      caseId,
+    });
+    expect(made.isError).toBe(false);
+    const ref = made.data.task.ref as string;
+    expect(ref).toBe('T-1');
+
+    expect((await call(agent, 'list_tasks', { query: 'proxy', open: true })).data.total).toBe(1);
+    expect((await call(agent, 'list_tasks', { mine: true })).data.total).toBe(0);
+    await call(agent, 'assign_task', { task: ref, assignees: [annId] });
+    expect((await call(agent, 'list_tasks', { mine: true })).data.total).toBe(1);
+
+    const moved = await call(agent, 'update_task', { task: ref, patch: { status: 'in_progress' } });
+    expect(moved.data.task.category).toBe('in_progress');
+    await call(agent, 'comment_on_task', { task: ref, body: 'Logs pulled, hashing now' });
+    const got = (await call(agent, 'get_task', { task: ref })).data;
+    expect(got.comments.map((c: { body: string }) => c.body)).toEqual(['Logs pulled, hashing now']);
+    const item = got.task.checklist[0].id as string;
+    expect(
+      (await call(agent, 'set_checklist_item', { task: ref, itemId: item, done: true })).isError,
+    ).toBe(false);
+    expect((await call(agent, 'get_task', { task: ref })).data.task.checklist[0].done).toBe(true);
+    expect(
+      (await call(agent, 'set_checklist_item', { task: ref, itemId: 'nope', done: true })).isError,
+    ).toBe(true);
+
+    const hist = (await call(agent, 'get_task_history', { task: ref })).data.ops;
+    expect(
+      hist.every((h: { actor: { name: string } }) => h.actor.name === 'ANN via triage-bot'),
+    ).toBe(true);
+    expect((await call(agent, 'list_runs')).data.runs).toEqual([]);
+    expect((await call(agent, 'list_teams')).data.teams).toEqual([]);
+
+    // A read token can look but not touch.
+    expect((await call(reader, 'get_task', { task: ref })).data.task.title).toMatch(/proxy/);
+    expect((await call(reader, 'comment_on_task', { task: ref, body: 'x' })).data.error).toMatch(
+      /read-only/,
+    );
   });
 
   it('never returns the contents of a file', async () => {

@@ -23,6 +23,9 @@ config:
   maxUploadMb: 25
   caseQuotaMb: 2048
   loginRateLimit: 30
+  # Chat hosts task webhooks may post to, e.g. [chat.corp.example, "*.corp.example"]. Empty turns
+  # webhooks off.
+  webhookAllowedHosts: []
   argon2MemoryKib: 65536
   logLevel: info
 
@@ -79,6 +82,23 @@ httpRoute:
   host: midden.example.com
   # Whether the gateway's listener terminates TLS, for working out publicOrigin.
   https: true
+
+# Prometheus metrics at /api/metrics (see docs/metrics.md). Scraping needs an admin's API token
+# (read-only is enough), sent as a bearer token. Nothing is ever sent out of the pod.
+metrics:
+  enabled: false
+  # A prometheus-operator ServiceMonitor. Needs the operator's CRDs in the cluster.
+  serviceMonitor:
+    enabled: false
+    interval: 60s
+    scrapeTimeout: 10s
+    # A Secret in the release namespace holding the token, e.g.
+    # kubectl create secret generic midden-metrics --from-literal=token=mdn_...
+    tokenSecret:
+      name: ''
+      key: token
+    # Extra labels, for an operator that selects ServiceMonitors by label.
+    labels: {}
 
 # Only let traffic reach the pod from these sources, e.g. your ingress controller's namespace.
 networkPolicy:

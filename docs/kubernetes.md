@@ -92,6 +92,16 @@ helm upgrade midden oci://ghcr.io/jacstrong/midden/charts/midden \
 
 Migrations only run forward, so rolling back to an older version means restoring the backup too. `helm rollback` alone isn't enough.
 
+## Metrics
+
+To have Prometheus scrape Midden, set `metrics.enabled`. Scraping needs an admin's API token, so create a read-only one under **API tokens** and store it in a Secret:
+
+```bash
+kubectl create secret generic midden-metrics --from-literal=token=mdn_...
+```
+
+With the Prometheus operator, also set `metrics.serviceMonitor.enabled` and `metrics.serviceMonitor.tokenSecret.name: midden-metrics`, and the chart creates a ServiceMonitor that sends the token. Without the operator, point a scrape job at the service's `/api/metrics` with the token as its bearer credential. If `networkPolicy.enabled` is on, add Prometheus's namespace to `networkPolicy.from`. [Metrics](metrics.md) lists what is exposed.
+
 ## Security
 
 By default the pod runs as a non-root user with a read-only root filesystem, no added capabilities and no Kubernetes API token. Midden needs no outbound access unless you use single sign-on. To limit who can reach it, set `networkPolicy.enabled` and list your ingress controller in `networkPolicy.from`.

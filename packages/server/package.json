@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
-    "dev": "node --watch --no-warnings=ExperimentalWarning --experimental-transform-types --import ../../scripts/dev-ts.mjs src/main.ts",
+    "dev": "MIDDEN_DATA=\"${MIDDEN_DATA:-../../data/dev}\" node --watch --no-warnings=ExperimentalWarning --experimental-transform-types --import ../../scripts/dev-ts.mjs src/main.ts",
     "start": "node --no-warnings=ExperimentalWarning dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist",

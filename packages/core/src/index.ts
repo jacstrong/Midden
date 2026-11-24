@@ -21,6 +21,18 @@ export * from './ops/ops.js';
 export * from './ops/reducer.js';
 export * from './sync/protocol.js';
 
+export * from './tasks/types.js';
+export * from './tasks/schemas.js';
+export * from './tasks/ops.js';
+export * from './tasks/reducer.js';
+export * from './tasks/csv.js';
+export * from './tasks/playbook.js';
+export * from './tasks/refs.js';
+export * from './tasks/views.js';
+export * from './tasks/bulk.js';
+export * from './tasks/notify.js';
+export * from './tasks/insights.js';
+
 export * from './codec/casefile.js';
 export { demoCaseState, DEMO_SUMMARY } from './demo/demoCase.js';
 

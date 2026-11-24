@@ -74,6 +74,14 @@ spec:
               value: {{ .Values.config.caseQuotaMb | quote }}
             - name: MIDDEN_LOGIN_RATE_LIMIT
               value: {{ .Values.config.loginRateLimit | quote }}
+            {{- with .Values.config.webhookAllowedHosts }}
+            - name: MIDDEN_WEBHOOK_ALLOWED_HOSTS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- if .Values.metrics.enabled }}
+            - name: MIDDEN_METRICS
+              value: token
+            {{- end }}
             - name: MIDDEN_ARGON2_MEMORY_KIB
               value: {{ .Values.config.argon2MemoryKib | quote }}
             - name: MIDDEN_LOG_LEVEL

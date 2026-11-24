@@ -21,7 +21,7 @@ A token acts as the person who made it and can never do more than they can. On t
 | Read only      | Every `GET` a token can reach. This is the default.                         |
 | Read and write | Also create cases, change them, and upload or delete scans and attachments. |
 
-Some things always need a person signed in, whichever kind of token you hold: managing accounts and tokens, server administration (a backup contains password hashes), permanently deleting a case, and changing who can see one. These answer `403` with the code `session_required`. A stolen token can't mint more tokens or widen its own reach.
+Some things always need a person signed in, whichever kind of token you hold: managing accounts and tokens, server administration (a backup contains password hashes), permanently deleting a case, and changing who can see one. For tasks, a token can read, create, change, comment on, import and export them, but approving or rejecting a task is refused: the named approver decides in person. Teams, saved views, notifications and webhooks are browser-only too. These answer `403` with the code `session_required`. A stolen token can't mint more tokens or widen its own reach.
 
 Tokens stop working when they expire, when their owner revokes them, or when an admin disables the owner or resets their password. Midden stores only a hash of each token.
 
