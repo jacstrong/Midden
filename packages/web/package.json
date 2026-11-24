@@ -8,6 +8,7 @@
     "dev": "pnpm build:worker && vite",
     "build:worker": "vite build --config vite.worker.config.ts",
     "build": "pnpm build:worker && vite build",
+    "dev:standalone": "pnpm build:worker && vite --config vite.standalone.config.ts",
     "build:standalone": "pnpm build:worker && vite build --config vite.standalone.config.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit"

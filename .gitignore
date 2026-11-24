@@ -18,3 +18,4 @@ release/
 packages/web/src/generated/
 website/.vitepress/cache/
 release
+midden-data/

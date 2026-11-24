@@ -46,7 +46,14 @@ async function main(): Promise<void> {
   await app.listen({ port: cfg.port, host: cfg.host });
 }
 
-main().catch((err) => {
+main().catch((err: NodeJS.ErrnoException & { port?: number }) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${err.port} is already in use, most likely by another Midden server. ` +
+        `Stop it (\`lsof -i :${err.port}\` shows what has it), or set MIDDEN_PORT to use another port.`,
+    );
+    process.exit(1);
+  }
   console.error(err);
   process.exit(1);
 });
