@@ -110,6 +110,7 @@ const ways = [
     points: [
       'One container with the database, file store and web client inside.',
       'About twenty analysts on one case at once, each seeing the others’ changes as they happen.',
+      'Tasks, team boards and playbooks, with notifications in the app or in Rocket.Chat.',
       'Runs on a laptop or a Raspberry Pi 4/5. Images for amd64 and arm64.',
     ],
   },
@@ -122,6 +123,7 @@ const ways = [
       'One file. No server, no storage, no network calls.',
       'Open it from disk, work, save a .json, reopen it later.',
       'Parses nmap scans in the page.',
+      'Cases only. Tasks, teams and notifications need the server.',
     ],
   },
 ];
@@ -164,6 +166,93 @@ const features = [
   },
 ];
 
+// An illustrative run on the task board, drawn like the app's own cards. Priority colours match
+// PRIORITY_COLOR in packages/web/src/tasks/shared.tsx.
+const PRI: Record<string, string> = {
+  urgent: 'var(--mg)',
+  high: 'var(--am)',
+  medium: 'var(--cy)',
+  low: 'var(--dimmer)',
+};
+interface Card {
+  id: string;
+  pri: keyof typeof PRI;
+  title: string;
+  who?: string;
+  appr?: string;
+  blocked?: string;
+  check?: string;
+  tag?: string;
+  closed?: boolean;
+}
+const board: { name: string; cards: Card[] }[] = [
+  {
+    name: 'To do',
+    cards: [
+      {
+        id: 'T-4',
+        pri: 'urgent',
+        title: 'Disable SMBv1 on the file server',
+        who: 'AN',
+        appr: 'Waiting for lena',
+      },
+      {
+        id: 'T-2',
+        pri: 'medium',
+        title: 'Baseline scheduled tasks on DCs',
+        blocked: 'Waiting on T-1',
+        tag: 'Host queue',
+      },
+    ],
+  },
+  {
+    name: 'In progress',
+    cards: [
+      {
+        id: 'T-1',
+        pri: 'high',
+        title: 'Pull EDR telemetry for the enclave',
+        who: 'AN',
+        check: '2/3',
+      },
+      {
+        id: 'T-5',
+        pri: 'medium',
+        title: 'Hunt long-lived DNS sessions',
+        who: 'BO',
+        tag: 'network',
+      },
+    ],
+  },
+  {
+    name: 'Done',
+    cards: [{ id: 'T-6', pri: 'low', title: 'Write up kickoff notes', who: 'LE', closed: true }],
+  },
+];
+
+const hunt = [
+  {
+    k: 'Playbooks',
+    d: 'Keep the checklist you run at the start of every hunt as a CSV file. A lead imports it, starts a run, and shares the tasks out, balancing what each person already has.',
+  },
+  {
+    k: 'Boards and queues',
+    d: 'Boards and tables for yourself, your team or a run. Dependencies, checklists and comments, with links to the cases, hosts and events the work is about.',
+  },
+  {
+    k: 'Sign-offs',
+    d: 'A task that accepts risk names an approver, and can’t be closed until that person approves in person. No API token or AI agent can do it for them.',
+  },
+  {
+    k: 'Notifications',
+    d: 'Assignments, mentions and approvals reach the bell in the app, and a team’s channel in Rocket.Chat if its lead wants them there.',
+  },
+  {
+    k: 'Insights',
+    d: 'Throughput, cycle time, stuck work and run burndowns for leads. Optional Prometheus metrics for whoever runs the server.',
+  },
+];
+
 const principles = [
   {
     k: 'Operation log',
@@ -180,6 +269,14 @@ const principles = [
   {
     k: 'Zero native modules',
     d: 'SQLite and argon2id come from Node itself. The arm64 image is the same JavaScript as amd64.',
+  },
+  {
+    k: 'Restricted stays restricted',
+    d: 'A task linked to a restricted case is hidden from everyone outside the case: on boards, in search, through the API and AI agents, in notifications, chat messages, exports and Insights.',
+  },
+  {
+    k: 'Nothing phones home',
+    d: 'No telemetry and no usage reporting. Metrics are off until you turn them on, and then Prometheus has to come and ask, with a token you issued.',
   },
   {
     k: 'One volume',
@@ -199,8 +296,8 @@ const principles = [
         <h1>What the adversary did, <em>where</em>, and in what order.</h1>
         <p class="lede">
           Midden is a shared case for hunt teams. Record each step of an intrusion with the evidence
-          attached, map the terrain from nmap scans, and hand the whole thing to the next shift as a
-          live case.
+          attached, map the terrain from nmap scans, share out the hunt’s tasks, and hand the whole
+          thing to the next shift as a live case.
         </p>
 
         <div class="term notch">
@@ -330,6 +427,71 @@ const principles = [
           <h3><i />{{ f.k }}</h3>
           <p>{{ f.d }}</p>
         </article>
+      </div>
+    </section>
+
+    <!-- ======== tasks ======== -->
+    <section class="block">
+      <h2 class="sb">Run the hunt</h2>
+      <p class="sub">
+        Hosted mode also tracks the work around the case: who is doing what, what is waiting on
+        what, and what still needs a sign-off.
+      </p>
+      <div class="hunt">
+        <ul class="hunt-list">
+          <li v-for="h in hunt" :key="h.k">
+            <b>{{ h.k }}</b>
+            <span>{{ h.d }}</span>
+          </li>
+          <li class="hunt-more">
+            <a :href="withBase('/docs/tasks')">Tasks and playbooks guide →</a>
+          </li>
+        </ul>
+
+        <figure class="case notch" aria-label="Illustration of a task board for one hunt run">
+          <div class="case-top">
+            <span class="case-brand"><i class="dot" />MIDDEN</span>
+            <span class="case-name">HUNT 2026-11 KICKOFF</span>
+            <span class="case-num">HOST TEAM</span>
+          </div>
+          <div class="case-tabs" aria-hidden="true">
+            <span class="on">Board</span><span>Table</span><span>Playbooks</span
+            ><span>Insights</span>
+          </div>
+          <div class="tboard-wrap" aria-hidden="true">
+            <div class="tboard">
+              <div v-for="(col, i) in board" :key="col.name" class="tcol">
+                <div class="tcolhead">
+                  <span>{{ col.name }}</span
+                  ><span class="tcount">{{ col.cards.length }}</span>
+                </div>
+                <div
+                  v-for="(c, j) in col.cards"
+                  :key="c.id"
+                  class="tcard"
+                  :class="{ closed: c.closed }"
+                  :style="{ '--pc': PRI[c.pri], '--d': `${0.15 + i * 0.2 + j * 0.12}s` }"
+                >
+                  <div class="tchead">
+                    <span class="tid">{{ c.id }}</span>
+                    <span class="tpri">{{ c.pri }}</span>
+                    <span v-if="c.appr" class="tappr">◆ {{ c.appr }}</span>
+                  </div>
+                  <div class="tctitle">{{ c.title }}</div>
+                  <div v-if="c.blocked" class="tcblock">{{ c.blocked }}</div>
+                  <div class="tcmeta">
+                    <span v-if="c.who" class="tav">{{ c.who }}</span>
+                    <span v-if="c.check">☑ {{ c.check }}</span>
+                    <span v-if="c.tag" class="ttag">{{ c.tag }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            Illustrative run. Everyone on the board sees a card move as it happens.
+          </figcaption>
+        </figure>
       </div>
     </section>
 
@@ -730,6 +892,165 @@ h1 em {
   }
   .lane .rail {
     stroke-dashoffset: 0;
+  }
+}
+
+/* ---------- task board illustration ---------- */
+.hunt {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 40px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .hunt {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+.hunt-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.hunt-list li {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+.hunt-list b {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--am);
+}
+.hunt-list .hunt-more {
+  border-bottom: 0;
+}
+.hunt-more a {
+  color: var(--cy);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+.hunt-more a:hover {
+  color: var(--bright);
+  text-shadow: 0 0 10px rgba(34, 232, 255, 0.5);
+}
+.tboard-wrap {
+  overflow-x: auto;
+}
+.tboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 8px;
+  min-width: 480px;
+  padding: 12px;
+  font-family: var(--mono);
+}
+.tcol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 210px;
+  padding: 6px;
+  background: rgba(7, 11, 19, 0.6);
+}
+.tcolhead {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.tcount {
+  color: var(--dimmer);
+}
+.tcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--pc);
+  animation: m-in 0.6s both;
+  animation-delay: var(--d, 0s);
+}
+.tchead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  font-size: 9.5px;
+}
+.tid {
+  color: var(--am);
+}
+.tpri {
+  color: var(--pc);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.tappr {
+  color: var(--am);
+  letter-spacing: 0.04em;
+}
+.tctitle {
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--bright);
+}
+.tcard.closed .tctitle {
+  color: var(--dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--dimmer);
+}
+.tcblock {
+  font-size: 10px;
+  color: var(--mg);
+}
+.tcmeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 10px;
+  color: var(--dim);
+}
+.tav {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #13233a;
+  border: 1px solid var(--line2);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.ttag {
+  padding: 0 5px;
+  border: 1px solid var(--line2);
+  color: var(--dim);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcard {
+    animation: none;
   }
 }
 
